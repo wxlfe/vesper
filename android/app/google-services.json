@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "342610030083",
+    "project_id": "vesper-47594",
+    "storage_bucket": "vesper-47594.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:342610030083:android:3c52ab82c4ff988bc22836",
+        "android_client_info": {
+          "package_name": "dev.wxlfe.vesper"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDisJqThpUPWbu7jxNnqB3zoNuU2lhVpkU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -29,6 +29,8 @@ Candidate databases:
 
 Sensitive content should be encrypted before local persistence. The local database may store encrypted payloads exactly as received from Firestore, plus local sync state.
 
+The current Phase 1 scaffold uses `EncryptedCacheService` as a lightweight bridge for offline viewing. It stores the encrypted Firestore request records for a group and decrypts only when rendering. This is acceptable for early validation, but it should be replaced by the deliberate encrypted local database described above before broader release.
+
 ## Local Key Material
 
 User private keys live in iOS Keychain or Android Keystore-backed secure storage. Group keys may be cached locally only if protected by platform secure storage or an app-level encrypted key store.

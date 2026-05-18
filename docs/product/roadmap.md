@@ -20,8 +20,9 @@ Core features:
 - Group request publishing setting: approve before publishing or publish immediately
 - Encrypted group keys
 - Encrypted prayer requests
+- Author-managed request updates, removal, and answered status
 - Leader and Member roles
-- Leader promotion with Leader-visible approvals, disputes, and delayed activation
+- Group settings changes with Leader-visible approvals, disputes, promotion, removal, and delayed activation
 - Prayer acknowledgements
 - Request status changes
 - Follow-up reminders
@@ -33,9 +34,10 @@ Success criteria:
 - Users can create and join groups.
 - Prayer request content is unreadable from Firebase Console.
 - Group members can read decrypted requests on trusted devices.
+- Request authors can update, remove, and mark their own requests as answered without exposing plaintext to Firestore.
 - Groups can choose whether member-created requests require Leader approval before publication.
 - Invite-code join requests show Leaders who requested access and who invited them.
-- Leader promotions remain private to Leaders until they take effect.
+- Group settings changes remain private to Leaders until they take effect.
 - The product feels safe, peaceful, trustworthy, simple, and thoughtful.
 
 ## Phase 2: Pastoral Depth

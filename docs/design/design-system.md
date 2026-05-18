@@ -4,7 +4,7 @@ The Vesper design system should make private prayer collaboration feel peaceful,
 
 ## Brand
 
-The product name is `vesper` in brand contexts. Use lowercase when presenting the wordmark or brand label.
+The product name should be presented to users as `Vesper` with a capital `V`. Internal package names, IDs, and code symbols may remain lowercase where platform conventions require it.
 
 Design attributes:
 
@@ -71,29 +71,31 @@ letter-spacing: 0.04em;
 
 ## Color
 
+The core palette should feel like twilight: quiet, reflective, and softly luminous. Use violet-gray surfaces and restrained periwinkle accents to suggest evening prayer without becoming decorative, mystical, or neon.
+
 ### Light Mode
 
 ```text
-Background:     #f6f5f2
+Background:     #f5f2f8
 Surface:        #ffffff
-Primary text:   #1f1f1d
-Secondary text: #6b6b67
-Accent:         #6f7c6b
-Divider:        #e5e2dc
+Primary text:   #211f2d
+Secondary text: #6f697d
+Accent:         #6d5f99
+Divider:        #e5dfec
 ```
 
 ### Dark Mode
 
 ```text
-Background:     #121311
-Surface:        #1b1d1a
-Primary text:   #f2f1ed
-Secondary text: #a4a39d
-Accent:         #8c9a87
-Divider:        #30322e
+Background:     #11101a
+Surface:        #1c1a28
+Primary text:   #f3f0f8
+Secondary text: #aaa3ba
+Accent:         #a99ad6
+Divider:        #343043
 ```
 
-Dark mode should feel candlelit rather than neon. Avoid high-saturation accent colors unless used for critical semantic states.
+Dark mode should feel like twilight: quiet, low-glare, and softly luminous. Avoid neon purple, saturated blue, high-contrast cyber aesthetics, and high-saturation accent colors unless used for critical semantic states.
 
 ## Semantic Color
 
@@ -170,11 +172,25 @@ Avoid excessive icons, filled icon sets, novelty religious symbols, and icons th
 
 Should show only the minimum needed context: group, author display state, age, status, and a short decrypted preview if appropriate. Avoid public counts and social ranking.
 
+When a requester profile is available, show the person's display name in quiet metadata such as `Sarah · active · May 18`. Fall back to calm generic language when a profile is unavailable. Do not expose raw user IDs in normal UI.
+
 Requests awaiting approval should use quiet status language such as `waiting for approval` or `needs review`. Do not make pending requests feel rejected, urgent, or publicly exposed. In approval-required groups, pending request cards should only appear for the author and Leaders with approval permission.
 
-### Prayed Button
+Request authors may see owner-only actions to `Update`, `Remove`, or mark the request `Answered` inside a three-dot overflow menu. Keep these actions secondary and calm; removal should not use alarming language. Do not show the `Prayed` action on a user's own requests. For other people's requests, double-tap may mark the request as prayed for without adding public reaction mechanics.
 
-The interaction should feel personal, gentle, and affirming.
+### Row Action Menus
+
+Long-press action menus may reveal secondary options on group and member rows, but they must not be the only way to perform critical workflows. Keep menu actions labeled, calm, and separated from the row's primary tap target.
+
+For group rows, long-pressing may reveal `Pin` or `Unpin`, `Share`, and `Leave`. Pinned groups should appear in a `Pinned Groups` section above the full group list. For Member rows in Leader-only Group Settings, long-pressing may reveal `Promote` and `Remove`. Promotion and removal actions should create pending consensus changes rather than immediately changing access.
+
+### Profile Screen
+
+The Profile screen should keep account management quiet and practical: editable display name first, the user's own prayer requests across groups next, and a low-emphasis `Log out` action at the bottom. Avoid making logout the primary home-screen action.
+
+### Prayed Action
+
+The interaction should feel personal, gentle, and affirming. It should not appear on a user's own requests.
 
 Use:
 
@@ -184,19 +200,21 @@ Use:
 
 Avoid counters, streaks, or public reaction mechanics.
 
-### Privacy Badge
+### Privacy Messaging
 
-Privacy messaging should be subtle and trustworthy.
+Privacy messaging should be subtle and trustworthy. Encryption can be explained on the initial landing/onboarding screen for new users, but it should not be repeatedly advertised throughout normal app flows because it adds visual weight and displaces prayer and group context.
 
 Examples:
 
 ```text
 end-to-end encrypted
 only your group can read this
-vesper cannot access prayer contents
+Vesper cannot access prayer contents
 ```
 
 Avoid cybersecurity-style fear messaging.
+
+Do not show persistent encryption cards, badges, or banners on ordinary group, request, or settings screens unless the user is in an onboarding, help, or recovery context.
 
 ### Empty States
 

@@ -11,7 +11,7 @@ group_members/{membershipId}
 group_keys/{groupKeyId}
 invite_codes/{inviteCodeId}
 join_requests/{joinRequestId}
-leader_promotions/{promotionId}
+group_settings_changes/{changeId}
 prayer_requests/{requestId}
 prayer_updates/{updateId}
 prayer_actions/{actionId}
@@ -40,6 +40,8 @@ Stores user profile and public cryptographic identity.
   }
 }
 ```
+
+`displayName` is non-sensitive profile metadata used for member lists, Leader-facing join request review, settings change descriptions, and prayer request attribution inside groups. Do not copy display names into encrypted prayer payloads or use them in notification copy that could reveal request context.
 
 Do not store private keys, recovery phrases, or plaintext pastoral notes.
 
@@ -108,6 +110,7 @@ Stores one encrypted group key per member per key version.
   "keyVersion": 3,
   "encryptedGroupKey": "base64",
   "nonce": "base64",
+  "ephemeralPublicKey": "base64",
   "algorithm": "x25519-xchacha20-poly1305",
   "createdAt": "timestamp",
   "createdBy": "userId",
@@ -168,15 +171,19 @@ Allowed statuses:
 
 Leaders may read pending join requests for their groups. The request should show Leaders who requested access and, when known, who invited them. Approving a join request creates or activates the membership and requires a Leader device to encrypt the active group key for the requester.
 
-## `leader_promotions`
+## `group_settings_changes`
 
-Stores Leader-only promotion workflows for making a Member a Leader.
+Stores Leader-only proposed group settings changes. This includes request publishing policy changes, Leader additions, and Member removals.
 
 ```json
 {
   "groupId": "groupId",
-  "nomineeUserId": "userId",
-  "nominatedBy": "userId",
+  "type": "add_leader",
+  "proposedBy": "userId",
+  "targetUserId": "userId",
+  "proposedSettings": {
+    "requireApproval": false
+  },
   "status": "pending",
   "createdAt": "timestamp",
   "expiresAt": "timestamp",
@@ -186,12 +193,17 @@ Stores Leader-only promotion workflows for making a Member a Leader.
   },
   "disputes": {
     "leaderUserId": {
-      "createdAt": "timestamp",
-      "reasonCode": "not_ready"
+      "createdAt": "timestamp"
     }
   }
 }
 ```
+
+Allowed types:
+
+- `add_leader`
+- `remove_member`
+- `publishing_policy`
 
 Allowed statuses:
 
@@ -201,7 +213,7 @@ Allowed statuses:
 - `expired_approved`
 - `cancelled`
 
-Promotion records are visible only to current Leaders. Members, including the nominee, must not be able to read pending, disputed, cancelled, or expired promotion records. The nominee remains a `member` until all Leaders approve early or the 24-hour dispute window closes with no disputes. Any dispute cancels the promotion and remains visible to Leaders.
+Group settings change records are visible only to current Leaders. Members, including a Member targeted for Leader access or removal, must not be able to read pending, disputed, cancelled, or expired settings change records. Proposed changes take effect only when all Leaders approve early or the 24-hour dispute window closes with no disputes. Any dispute cancels the change and remains visible to Leaders. A `remove_member` change marks the target membership as `removed` only after consensus completes.
 
 ## `prayer_requests`
 
@@ -217,11 +229,13 @@ Stores encrypted request payloads plus non-sensitive routing metadata.
   "anonymous": false,
   "keyVersion": 3,
   "payloadVersion": 1,
+  "algorithm": "xchacha20-poly1305",
   "ciphertext": "base64",
   "nonce": "base64",
   "metadata": {
     "hasFollowup": true,
     "hasReminder": false,
+    "followUpAt": "timestamp",
     "updateCount": 2
   }
 }
@@ -238,7 +252,9 @@ Allowed statuses:
 - `archived`
 - `deleted`
 
-`pending_approval` requests are not published to the whole group feed. The author and Leaders with approval permission may read the encrypted request, review it on-device after decryption, and transition it to `active` or `deleted`. Groups with `settings.requireApproval: false` should create requests directly as `active`.
+`pending_approval` requests are not published to the whole group feed. The author and Leaders with approval permission may read the encrypted request, review it on-device after decryption, and transition it to `active` or another terminal status. Groups with `settings.requireApproval: false` should create requests directly as `active`.
+
+Request authors may manage their own requests after creation. Updating a request must re-encrypt the title and body on-device before writing replacement ciphertext. Removing a request should transition it to `deleted` rather than deleting the document directly. Authors may also mark their own requests as `answered`.
 
 ## `prayer_updates`
 
@@ -344,7 +360,7 @@ Recommended indexes:
 - `invite_codes`: `groupId`, `status`, `createdAt`
 - `join_requests`: `groupId`, `status`, `createdAt`
 - `join_requests`: `requestedBy`, `status`, `createdAt`
-- `leader_promotions`: `groupId`, `status`, `expiresAt`
+- `group_settings_changes`: `groupId`, `status`, `expiresAt`
 - `prayer_requests`: `groupId`, `status`, `updatedAt`
 - `prayer_requests`: `groupId`, `status`, `createdAt` for approval queues
 - `prayer_updates`: `requestId`, `createdAt`
@@ -362,11 +378,11 @@ Avoid global feeds and cross-group queries.
 - Group members may read published request statuses such as `active`, `answered`, `resolved`, and `archived` according to membership access.
 - Any active member may create invite codes when group settings allow member invites.
 - Join requests may be read by the requester and group Leaders, but only Leaders may approve or reject them.
-- Leader promotion records may be read only by current Leaders and must never be readable by Members, including the nominee.
-- A Member's role may change to `leader` only after the Leader promotion workflow approves early or reaches the end of its dispute window without disputes.
+- Group settings change records may be read only by current Leaders and must never be readable by Members, including a targeted Member.
+- A Member's role may change to `leader`, and publishing policy may change, only after the group settings change workflow approves early or reaches the end of its dispute window without disputes.
 - Anonymous Firebase users are prohibited.
 - Removed or blocked members cannot read future group content.
 - Clients cannot write server-owned fields such as aggregate counts without validation.
-- Cloud Functions must validate membership before fanout, invite, join request, or promotion operations.
+- Cloud Functions must validate membership before fanout, invite, join request, or settings change operations.
 
 Security rules protect access boundaries, not plaintext confidentiality. Encryption remains mandatory.

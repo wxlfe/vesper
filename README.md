@@ -49,7 +49,7 @@ Product:
 
 ## Current Status
 
-This repository currently contains foundational documentation. Application code has not been added yet.
+This repository now contains the initial Flutter/Firebase implementation scaffold for Phase 1 MVP validation. Current app code covers email authentication, public key registration, group creation, copyable invite codes, Leader-approved join requests, encrypted group-key delivery, encrypted prayer requests, request approval/status actions, follow-up reminders, Leader-only group settings changes, and basic encrypted-record offline viewing.
 
 ## Security Posture
 

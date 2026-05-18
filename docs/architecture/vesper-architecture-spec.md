@@ -139,11 +139,11 @@ Non-sensitive metadata may include group IDs, document IDs, timestamps, coarse s
 
 ## Group Governance
 
-Groups use two roles: `leader` and `member`. The group creator becomes a Leader automatically. Leaders can approve join requests, approve pending prayer requests when a group requires review, manage membership, and nominate Members to become Leaders.
+Groups use two roles: `leader` and `member`. The group creator becomes a Leader automatically. Leaders can approve join requests, approve pending prayer requests when a group requires review, and propose group settings changes.
 
 Any active member may create or share a copyable invite code for their group. Using an invite code creates a join request rather than immediate membership. Leaders should see who requested access and, when known, which member invited them. Membership begins only after Leader approval and successful delivery of an encrypted group key.
 
-Leader promotion is intentionally quiet and Leader-only. When a Leader nominates a Member for promotion, the nominee remains a Member for 24 hours and the pending promotion is visible only to current Leaders. Members, including the nominee, must not see the pending promotion, approvals, disputes, or cancellation state. If all current Leaders explicitly approve before the 24-hour window ends, the nominee becomes a Leader immediately. If no Leader disputes the promotion before the deadline, the nominee becomes a Leader automatically. If any Leader disputes it, the promotion is cancelled and the dispute remains visible to Leaders.
+Group settings changes are intentionally quiet and Leader-only while pending. Changes such as request publishing policy updates, adding a Member as a Leader, and removing a Member are proposed from Group Settings. A proposed change waits for a 24-hour review window unless all current Leaders explicitly approve earlier. If any Leader disputes the change, it is cancelled and the dispute remains visible to Leaders. Members, including a Member proposed for Leader access or removal, must not see pending, disputed, or cancelled settings changes. A proposed Leader remains a Member until the settings change takes effect, and a proposed removal keeps active access until consensus completes.
 
 ## Navigation Architecture
 
@@ -179,14 +179,18 @@ The home screen should avoid dashboard clutter and avoid social-media-style urge
 
 ### Groups
 
-Displays user groups, unread activity, and pending approvals. Group cards should be calm, lightweight, and easy to scan.
+Displays pinned groups, user groups, and total request counts. Group cards should be calm, lightweight, and easy to scan. They should not expose internal publishing policy such as whether requests require Leader review. Long-pressing a group row may open a menu with secondary actions such as `Pin` or `Unpin`, `Share`, and `Leave` without replacing the primary tap target. Pinned groups are a local preference and should not affect membership or visibility.
 
-Group setup must include a request publishing option:
+Leader-only Group Settings must include a request publishing option:
 
 - Approve before publishing: member-created requests are visible only to the author and approving Leaders until approved.
 - Publish immediately: member-created requests appear in the group feed by default after upload.
 
-Group management should include invite codes, join requests, member roles, and Leader-only promotion review without making the group feel bureaucratic.
+Group management should include invite codes and join requests. Leader-only Group Settings should include request publishing policy, member roles, proposed Leader additions, proposed Member removals, and pending settings changes without making the group feel bureaucratic. Long-pressing a Member row may open a menu with `Promote` and `Remove`, but both actions must create pending settings changes rather than immediate role or membership changes.
+
+### Profile
+
+The Profile screen should be available from the home header. It should let the user manage their display name, review their own prayer requests across groups, and sign out from a low-emphasis logout button near the bottom of the screen.
 
 ### Prayer Request Detail
 
@@ -194,10 +198,12 @@ Displays decrypted prayer content, author context, group, timestamps, and availa
 
 Actions:
 
-- Prayed
-- Follow up
-- Resolve
-- Archive
+- Double-tap to mark someone else's request as prayed for
+- Update, for the request author, inside the overflow menu
+- Remove, for the request author, inside the overflow menu
+- Answered, for the request author inside the overflow menu, or as a Leader action on another user's request
+
+Request cards should support multiple requests in a scrollable group detail view without clipping long request lists.
 
 No reactions, likes, public counters, or public metrics should be shown.
 

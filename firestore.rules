@@ -1,0 +1,203 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isSelf(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function membershipPath(groupId, userId) {
+      return /databases/$(database)/documents/group_members/$(groupId + '_' + userId);
+    }
+
+    function isActiveMember(groupId) {
+      return signedIn()
+        && exists(membershipPath(groupId, request.auth.uid))
+        && get(membershipPath(groupId, request.auth.uid)).data.status == 'active';
+    }
+
+    function isLeader(groupId) {
+      return isActiveMember(groupId)
+        && get(membershipPath(groupId, request.auth.uid)).data.role == 'leader';
+    }
+
+    function validEncryptedPayload(data) {
+      return data.ciphertext is string
+        && data.ciphertext.size() > 0
+        && data.ciphertext.size() < 900000
+        && data.nonce is string
+        && data.nonce.size() > 0
+        && data.nonce.size() < 256
+        && data.keyVersion is int
+        && data.payloadVersion is int
+        && data.algorithm is string;
+    }
+
+    function validGroup(data) {
+      return data.keys().hasOnly(['name', 'description', 'createdBy', 'createdAt', 'updatedAt', 'memberCount', 'activeKeyVersion', 'settings'])
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 80
+        && data.description is string && data.description.size() <= 240
+        && data.createdBy is string
+        && data.memberCount is int
+        && data.activeKeyVersion is int
+        && data.settings is map
+        && data.settings.keys().hasOnly(['allowAnonymous', 'requireApproval', 'allowMemberInvites'])
+        && data.settings.allowAnonymous is bool
+        && data.settings.requireApproval is bool
+        && data.settings.allowMemberInvites is bool;
+    }
+
+    function validMembership(data) {
+      return data.keys().hasOnly(['groupId', 'userId', 'role', 'joinedAt', 'invitedBy', 'status'])
+        && data.groupId is string
+        && data.userId is string
+        && data.role in ['leader', 'member']
+        && data.status in ['pending', 'active', 'removed', 'blocked'];
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn();
+      allow create, update: if isSelf(userId)
+        && request.resource.data.keys().hasOnly(['displayName', 'publicKey', 'publicKeyAlgorithm', 'createdAt', 'lastActiveAt', 'notificationPreferences'])
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() > 0
+        && request.resource.data.displayName.size() <= 80
+        && request.resource.data.publicKey is string
+        && request.resource.data.publicKey.size() > 0
+        && request.resource.data.publicKey.size() < 2048
+        && request.resource.data.publicKeyAlgorithm == 'x25519';
+      allow delete: if false;
+    }
+
+    match /groups/{groupId} {
+      allow read: if isActiveMember(groupId);
+      allow create: if signedIn()
+        && validGroup(request.resource.data)
+        && request.resource.data.createdBy == request.auth.uid;
+      allow update: if isLeader(groupId) && validGroup(request.resource.data);
+      allow delete: if false;
+    }
+
+    match /group_members/{membershipId} {
+      allow read: if signedIn() && (resource.data.userId == request.auth.uid || isActiveMember(resource.data.groupId));
+      allow create: if signedIn()
+        && validMembership(request.resource.data)
+        && (
+          (request.resource.data.userId == request.auth.uid
+            && request.resource.data.role == 'leader'
+            && request.resource.data.status == 'active'
+            && getAfter(/databases/$(database)/documents/groups/$(request.resource.data.groupId)).data.createdBy == request.auth.uid)
+          || isLeader(request.resource.data.groupId)
+        );
+      allow update: if isLeader(resource.data.groupId)
+        && validMembership(request.resource.data)
+        && request.resource.data.groupId == resource.data.groupId
+        && request.resource.data.userId == resource.data.userId;
+      allow delete: if false;
+    }
+
+    match /group_keys/{groupKeyId} {
+      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      allow create: if signedIn()
+        && request.resource.data.groupId is string
+        && request.resource.data.userId is string
+        && request.resource.data.keyVersion is int
+        && request.resource.data.encryptedGroupKey is string
+        && request.resource.data.nonce is string
+        && request.resource.data.ephemeralPublicKey is string
+        && request.resource.data.algorithm == 'x25519-xchacha20-poly1305'
+        && request.resource.data.status == 'active'
+        && (request.resource.data.userId == request.auth.uid || isLeader(request.resource.data.groupId));
+      allow update, delete: if false;
+    }
+
+    match /invite_codes/{inviteCodeId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && isActiveMember(request.resource.data.groupId)
+        && request.resource.data.keys().hasOnly(['groupId', 'codeHash', 'createdBy', 'createdAt', 'expiresAt', 'status', 'useCount', 'maxUses'])
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.codeHash is string
+        && request.resource.data.codeHash.size() > 0
+        && request.resource.data.codeHash.size() < 128
+        && request.resource.data.status == 'active';
+      allow update: if isLeader(resource.data.groupId);
+      allow delete: if false;
+    }
+
+    match /join_requests/{joinRequestId} {
+      allow read: if signedIn() && (resource.data.requestedBy == request.auth.uid || isLeader(resource.data.groupId));
+      allow create: if signedIn()
+        && request.resource.data.requestedBy == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.groupId is string
+        && request.resource.data.inviteCodeId is string;
+      allow update: if isLeader(resource.data.groupId)
+        && request.resource.data.groupId == resource.data.groupId
+        && request.resource.data.requestedBy == resource.data.requestedBy
+        && request.resource.data.status in ['approved', 'rejected', 'cancelled'];
+      allow delete: if false;
+    }
+
+    match /group_settings_changes/{changeId} {
+      allow read: if isLeader(resource.data.groupId);
+      allow create: if isLeader(request.resource.data.groupId)
+        && request.resource.data.proposedBy == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.type in ['add_leader', 'remove_member', 'publishing_policy']
+        && request.resource.data.keys().hasOnly(['groupId', 'type', 'proposedBy', 'targetUserId', 'proposedSettings', 'status', 'createdAt', 'expiresAt', 'resolvedAt', 'approvals', 'disputes']);
+      allow update: if isLeader(resource.data.groupId);
+      allow delete: if false;
+    }
+
+    match /prayer_requests/{requestId} {
+      allow read: if isActiveMember(resource.data.groupId)
+        && (resource.data.status in ['active', 'answered', 'resolved', 'archived']
+          || resource.data.createdBy == request.auth.uid
+          || isLeader(resource.data.groupId));
+      allow create: if isActiveMember(request.resource.data.groupId)
+        && request.resource.data.createdBy == request.auth.uid
+        && request.resource.data.status in ['pending_approval', 'active']
+        && validEncryptedPayload(request.resource.data);
+      allow update: if isActiveMember(resource.data.groupId)
+        && (isLeader(resource.data.groupId) || resource.data.createdBy == request.auth.uid)
+        && request.resource.data.groupId == resource.data.groupId
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.status in ['pending_approval', 'active', 'answered', 'resolved', 'archived', 'deleted']
+        && validEncryptedPayload(request.resource.data);
+      allow delete: if false;
+    }
+
+    match /prayer_actions/{actionId} {
+      allow read: if isActiveMember(resource.data.groupId);
+      allow create: if isActiveMember(request.resource.data.groupId)
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.type == 'prayed';
+      allow update, delete: if false;
+    }
+
+    match /prayer_updates/{updateId} {
+      allow read: if isActiveMember(resource.data.groupId);
+      allow create: if isActiveMember(request.resource.data.groupId) && validEncryptedPayload(request.resource.data);
+      allow update, delete: if false;
+    }
+
+    match /notifications/{notificationId} {
+      allow read, update: if signedIn() && resource.data.userId == request.auth.uid;
+      allow create, delete: if false;
+    }
+
+    match /devices/{deviceId} {
+      allow read, create, update: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow delete: if false;
+    }
+
+    match /audit_events/{eventId} {
+      allow read: if isLeader(resource.data.groupId);
+      allow write: if false;
+    }
+  }
+}

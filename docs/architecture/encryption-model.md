@@ -123,20 +123,20 @@ Decrypting a request:
 
 The server never receives the plaintext group key.
 
-### Leader Promotion
+### Group Settings Changes
 
-Leader promotion changes group governance but does not require access to plaintext prayer content or plaintext group keys. Pending promotion records must be visible only to current Leaders. Members, including the nominee, must not see promotion state until the promotion has taken effect.
+Group settings changes affect governance but do not require access to plaintext prayer content or plaintext group keys. Pending settings change records must be visible only to current Leaders. Members, including a Member proposed for Leader access or removal, must not see pending, disputed, or cancelled settings change state.
 
-Promotion lifecycle:
+Settings change lifecycle:
 
-1. A Leader nominates an active Member.
-2. The nominee remains a Member during the 24-hour dispute window.
-3. Current Leaders may approve or dispute the promotion.
-4. If all current Leaders approve before the deadline, the nominee becomes a Leader immediately.
-5. If any Leader disputes, the promotion is cancelled.
-6. If the deadline passes with no disputes, the nominee becomes a Leader.
+1. A Leader proposes a settings change from Group Settings.
+2. The proposing Leader counts as an approval automatically.
+3. Current Leaders may approve or dispute the change.
+4. If all current Leaders approve before the deadline, the change applies immediately.
+5. If any Leader disputes, the change is cancelled.
+6. If the deadline passes with no disputes, the change applies automatically.
 
-Because Leaders can approve members and distribute group keys, promotion workflows must be protected by Firestore rules and, where Cloud Functions are used, server-side validation of current Leader status and promotion state.
+Because Leaders can approve members, distribute group keys, change publishing policy, promote Members, and remove Members, settings change workflows must be protected by Firestore rules and, where Cloud Functions are used, server-side validation of current Leader status and settings change state.
 
 ### Member Removal
 
