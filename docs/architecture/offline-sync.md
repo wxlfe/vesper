@@ -97,7 +97,7 @@ Use group-scoped cursors based on `updatedAt` or snapshot listeners. Keep sync w
 
 1. Check current membership and active key version.
 2. Re-encrypt queued drafts if the active key changed before upload.
-3. Submit writes in original user order where practical.
+3. Apply the group's current publishing policy: submit as `pending_approval` when approval is required, otherwise submit as `active`.
 4. Mark successful operations as synced.
 5. Keep failed operations with a clear retryable or blocked state.
 
@@ -111,6 +111,7 @@ Common conflicts:
 - Group key rotates while user has queued content
 - User removed from group before pending write replay
 - Same request updated from multiple devices
+- Group request approval setting changes while a request is queued offline
 
 Recommended behavior:
 
@@ -118,6 +119,7 @@ Recommended behavior:
 - Preserve encrypted updates as append-only records.
 - Block replay if membership is no longer active.
 - Re-encrypt pending writes with the current key version when the user still has access.
+- Use the server-side group approval setting at replay time rather than the setting captured when the draft was created.
 - Show a calm resolution message when an action cannot be completed.
 
 ## Firestore Offline Persistence

@@ -170,6 +170,8 @@ Avoid excessive icons, filled icon sets, novelty religious symbols, and icons th
 
 Should show only the minimum needed context: group, author display state, age, status, and a short decrypted preview if appropriate. Avoid public counts and social ranking.
 
+Requests awaiting approval should use quiet status language such as `waiting for approval` or `needs review`. Do not make pending requests feel rejected, urgent, or publicly exposed. In approval-required groups, pending request cards should only appear for the author and Leaders with approval permission.
+
 ### Prayed Button
 
 The interaction should feel personal, gentle, and affirming.

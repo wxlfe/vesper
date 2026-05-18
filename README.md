@@ -12,6 +12,7 @@ Core goals:
 - Keep prayer request content unreadable from Firebase Console.
 - Support group-based prayer, follow-up, and care workflows.
 - Preserve usability despite client-side encryption.
+- Keep group governance simple with Leader and Member roles.
 
 ## Planned Stack
 
@@ -19,8 +20,10 @@ Core goals:
 - Firebase Authentication for identity
 - Firestore for encrypted synchronization and metadata
 - Cloud Functions for orchestration without plaintext access
-- Firebase Cloud Messaging for generic notifications only
+- Firebase Cloud Messaging for generic notifications only when notification features are enabled
 - Firebase App Check for abuse reduction
+
+Initial implementation targets Firebase project `vesper-47594`, app name `Vesper`, bundle/package name `dev.wxlfe.vesper`, and version `0.1.0`. iOS is the first validation target, with Android close behind.
 
 See [Architecture Specification](docs/architecture/vesper-architecture-spec.md) for the full system overview.
 

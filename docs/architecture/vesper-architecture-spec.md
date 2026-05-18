@@ -7,7 +7,7 @@ Vesper is a privacy-first prayer request and pastoral care platform for churches
 - End-to-end encrypted prayer requests
 - Calm, emotionally safe user experience
 - Modern church-friendly design language
-- Simple operational overhead for churches and group leaders
+- Simple operational overhead for churches and Leaders
 
 Vesper should feel trustworthy, quiet, pastoral, modern, privacy-respecting, and emotionally lightweight. It should not feel corporate, gamified, social-media-like, surveillance-oriented, overly decorative, or aggressively religious.
 
@@ -30,7 +30,14 @@ Vesper should feel trustworthy, quiet, pastoral, modern, privacy-respecting, and
 
 ## Target Platforms
 
-Phase 1 targets iOS and Android through Flutter. Phase 2 may add web, macOS, and Windows with a clearly documented trust model for browser-based clients.
+Vesper targets iOS and Android through Flutter, with iOS as the first implementation validation target and Android close behind. Future web, macOS, or Windows clients require a clearly documented trust model, especially for browser-based clients.
+
+Initial mobile app identifiers:
+
+- App name: `Vesper`
+- Bundle/package name: `dev.wxlfe.vesper`
+- Initial version: `0.1.0`
+- Firebase project: `vesper-47594`
 
 ## Technology Stack
 
@@ -46,7 +53,7 @@ Phase 1 targets iOS and Android through Flutter. Phase 2 may add web, macOS, and
 - Firebase Authentication for identity
 - Firestore for encrypted data synchronization and metadata
 - Cloud Functions for orchestration that does not require plaintext access
-- Firebase Cloud Messaging for generic notifications
+- Firebase Cloud Messaging for generic notifications when notification features are enabled
 - Firebase App Check to reduce abuse from untrusted clients
 
 Cloud Functions must never possess plaintext prayer content, plaintext group keys, user private keys, or decrypted attachment contents.
@@ -124,11 +131,19 @@ Non-sensitive metadata may include group IDs, document IDs, timestamps, coarse s
 
 - User: authenticated person with a local private key and published public key.
 - Group: church, small group, ministry team, or pastoral care circle.
-- Group member: a user's role and status within a group.
+- Group member: a user's role and status within a group. The canonical group roles are `leader` and `member`.
 - Group key: symmetric key used to encrypt group-scoped sensitive content.
-- Prayer request: encrypted content plus non-sensitive routing metadata.
+- Prayer request: encrypted content plus non-sensitive routing metadata and publishing status.
 - Prayer update: encrypted follow-up, answered-prayer update, or private note.
-- Invitation: controlled flow for joining a group and receiving an encrypted group key.
+- Invitation: controlled invite-code flow for joining a group and receiving an encrypted group key after Leader approval.
+
+## Group Governance
+
+Groups use two roles: `leader` and `member`. The group creator becomes a Leader automatically. Leaders can approve join requests, approve pending prayer requests when a group requires review, manage membership, and nominate Members to become Leaders.
+
+Any active member may create or share a copyable invite code for their group. Using an invite code creates a join request rather than immediate membership. Leaders should see who requested access and, when known, which member invited them. Membership begins only after Leader approval and successful delivery of an encrypted group key.
+
+Leader promotion is intentionally quiet and Leader-only. When a Leader nominates a Member for promotion, the nominee remains a Member for 24 hours and the pending promotion is visible only to current Leaders. Members, including the nominee, must not see the pending promotion, approvals, disputes, or cancellation state. If all current Leaders explicitly approve before the 24-hour window ends, the nominee becomes a Leader immediately. If no Leader disputes the promotion before the deadline, the nominee becomes a Leader automatically. If any Leader disputes it, the promotion is cancelled and the dispute remains visible to Leaders.
 
 ## Navigation Architecture
 
@@ -166,6 +181,13 @@ The home screen should avoid dashboard clutter and avoid social-media-style urge
 
 Displays user groups, unread activity, and pending approvals. Group cards should be calm, lightweight, and easy to scan.
 
+Group setup must include a request publishing option:
+
+- Approve before publishing: member-created requests are visible only to the author and approving Leaders until approved.
+- Publish immediately: member-created requests appear in the group feed by default after upload.
+
+Group management should include invite codes, join requests, member roles, and Leader-only promotion review without making the group feel bureaucratic.
+
 ### Prayer Request Detail
 
 Displays decrypted prayer content, author context, group, timestamps, and available care actions.
@@ -193,16 +215,21 @@ three requests awaiting follow-up
 
 Notifications must not contain plaintext prayer content.
 
+New request notifications should be sent only when a request is published to the group. Approval-required groups may notify approving Leaders that a request needs review, using generic copy only.
+
 Avoid urgency, streaks, gamified loops, and addiction mechanics.
 
 ## Moderation Model
 
-Because content is end-to-end encrypted, platform operators cannot inspect or centrally moderate prayer content. Moderation is primarily a group-admin and church responsibility.
+Because content is end-to-end encrypted, platform operators cannot inspect or centrally moderate prayer content. Moderation is primarily a Leader and church responsibility.
+
+Groups may choose whether new requests require approval before being published. Approval happens inside the group's trust boundary: approving Leaders can decrypt pending requests on-device, while platform operators and Cloud Functions still cannot read request content. Groups that do not need pre-publication review may publish requests immediately by default.
 
 Design implications:
 
 - Reporting tools are limited by encryption boundaries.
 - Group ownership and trusted administration are essential.
+- Pending approval is a publishing state, not a server-side plaintext moderation workflow.
 - Abuse workflows should focus on membership controls, blocking, audit metadata, and church-owned escalation paths.
 
 ## Scalability Considerations

@@ -7,22 +7,24 @@ Vesper's roadmap prioritizes secure prayer collaboration first, then pastoral wo
 - Help churches and small groups manage prayer requests securely.
 - Make end-to-end encryption understandable without making the product feel technical.
 - Encourage prayer, care, and follow-up without gamification.
-- Keep operational overhead low for group leaders.
+- Keep operational overhead low for Leaders.
 
 ## Phase 1: MVP
 
 Core features:
 
-- Authentication with email/password, Apple, and Google
+- Authentication with email/password
 - User public key registration
 - Group creation
-- Group invitations and approvals
+- Copyable group invite codes and Leader-approved join requests
+- Group request publishing setting: approve before publishing or publish immediately
 - Encrypted group keys
 - Encrypted prayer requests
+- Leader and Member roles
+- Leader promotion with Leader-visible approvals, disputes, and delayed activation
 - Prayer acknowledgements
 - Request status changes
 - Follow-up reminders
-- Generic push notifications
 - Dark mode
 - Basic offline viewing and queued writes
 
@@ -31,13 +33,18 @@ Success criteria:
 - Users can create and join groups.
 - Prayer request content is unreadable from Firebase Console.
 - Group members can read decrypted requests on trusted devices.
-- Notifications never include prayer request plaintext.
+- Groups can choose whether member-created requests require Leader approval before publication.
+- Invite-code join requests show Leaders who requested access and who invited them.
+- Leader promotions remain private to Leaders until they take effect.
 - The product feels safe, peaceful, trustworthy, simple, and thoughtful.
 
 ## Phase 2: Pastoral Depth
 
 Candidate features:
 
+- Apple and Google authentication
+- Generic push notifications
+- Deep-link invitations once Vesper has an app link domain
 - Anonymous requests
 - Attachment support with encrypted files and metadata
 - Recovery passphrases
@@ -45,6 +52,7 @@ Candidate features:
 - Care assignments
 - Answered prayer history
 - Group moderation controls
+- More granular approval roles and review queues
 - Organization-level church support
 - Improved offline conflict handling
 - Limited web support with documented trust tradeoffs
@@ -67,8 +75,12 @@ Candidate features:
 - Encrypted search strategy
 - Multi-device key synchronization
 - Hardware-backed key attestation where practical
-- Admin recovery workflows that preserve user trust
+- Account recovery workflows that preserve user trust
 - Enterprise controls for larger churches
+
+## Implementation Notes
+
+Initial implementation targets the Firebase project `vesper-47594`, app name `Vesper`, bundle/package name `dev.wxlfe.vesper`, and version `0.1.0`. iOS is the first validation target, with Android kept close behind through Flutter. MVP validation should use local/debug builds before TestFlight, Play internal testing, or production release workflows.
 
 ## Non-Goals
 
@@ -83,6 +95,10 @@ Candidate features:
 ## Feature Specs
 
 Detailed feature specs should live in `docs/product/feature-specs/` as features become ready for design and implementation.
+
+Current specs:
+
+- [Group Governance](./feature-specs/group-governance.md)
 
 Recommended spec template:
 
