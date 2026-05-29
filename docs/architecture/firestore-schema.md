@@ -1,6 +1,6 @@
 # Firestore Schema
 
-Firestore stores encrypted prayer data, membership metadata, notification routing data, and operational state. Sensitive prayer content must be encrypted before it is written.
+Firestore stores encrypted prayer data, encrypted personal routine data, membership metadata, notification routing data, and operational state. Sensitive prayer content must be encrypted before it is written.
 
 ## Collection Overview
 
@@ -11,16 +11,27 @@ group_members/{membershipId}
 group_keys/{groupKeyId}
 invite_codes/{inviteCodeId}
 join_requests/{joinRequestId}
-group_settings_changes/{changeId}
 prayer_requests/{requestId}
+request_reports/{reportId}
 prayer_updates/{updateId}
 prayer_actions/{actionId}
+prayer_sessions/{sessionId}
+routine_sections/{sectionId}
+personal_prayers/{personalPrayerId}
+shared_routines/{sharedRoutineId}
+shared_routine_sections/{sectionId}
 notifications/{notificationId}
 devices/{deviceId}
 audit_events/{eventId}
 ```
 
 Use deterministic composite IDs where they reduce duplication and simplify rules. For example, `group_members/{groupId_userId}` and `group_keys/{groupId_userId_keyVersion}`.
+
+## Sensitive Content Rules
+
+Never store sensitive plaintext in Firestore. Sensitive plaintext includes prayer request title, body, personal prayer text, custom routine text, private routine names, pastoral notes, sensitive tags, private comments, attachment metadata, and content-derived summaries.
+
+Routine sharing intentionally discloses selected custom text to recipients, but shared custom text still must not be backend-readable plaintext. Encrypt shared routine content for intended recipients or use an app-level encrypted sharing model.
 
 ## `users`
 
@@ -41,9 +52,9 @@ Stores user profile and public cryptographic identity.
 }
 ```
 
-`displayName` is non-sensitive profile metadata used for member lists, Leader-facing join request review, settings change descriptions, and prayer request attribution inside groups. Do not copy display names into encrypted prayer payloads or use them in notification copy that could reveal request context.
+`displayName` is non-sensitive profile metadata used for member lists, Leader-facing join request review, admin history, and prayer request attribution inside groups. Do not copy display names into encrypted prayer payloads or use them in notification copy that could reveal request context.
 
-Do not store private keys, recovery phrases, or plaintext pastoral notes.
+Do not store private keys, recovery phrases, plaintext user content keys, plaintext group keys, or plaintext pastoral notes.
 
 ## `groups`
 
@@ -59,14 +70,12 @@ Stores group-level metadata that is acceptable for backend access.
   "memberCount": 24,
   "activeKeyVersion": 3,
   "settings": {
-    "allowAnonymous": false,
-    "requireApproval": true,
     "allowMemberInvites": true
   }
 }
 ```
 
-`settings.requireApproval` controls request publishing for the group. When `true`, new member-created requests start as `pending_approval` and must be approved by a Leader before they appear in the normal group feed. When `false`, new requests are published immediately as `active` after upload.
+Member-created requests publish immediately as `active`. Group-level Leader approval before publication is not part of the MVP.
 
 `settings.allowMemberInvites` controls whether Members may create invite codes. The default product behavior is that active Members may invite, but invite codes create join requests rather than granting immediate access.
 
@@ -99,6 +108,8 @@ Allowed statuses:
 - `removed`
 - `blocked`
 
+Any Leader may promote, demote, or remove members, but the last active Leader cannot be demoted or removed. Access-changing actions require confirmation and create metadata-only audit events.
+
 ## `group_keys`
 
 Stores one encrypted group key per member per key version.
@@ -118,7 +129,7 @@ Stores one encrypted group key per member per key version.
 }
 ```
 
-A user may only read their own `group_keys` documents.
+A user may only read their own `group_keys` documents. When a member is removed, future group content should use a rotated key version. Key rotation after removal should happen quietly in the background.
 
 ## `invite_codes`
 
@@ -169,51 +180,7 @@ Allowed statuses:
 - `rejected`
 - `cancelled`
 
-Leaders may read pending join requests for their groups. The request should show Leaders who requested access and, when known, who invited them. Approving a join request creates or activates the membership and requires a Leader device to encrypt the active group key for the requester.
-
-## `group_settings_changes`
-
-Stores Leader-only proposed group settings changes. This includes request publishing policy changes, Leader additions, and Member removals.
-
-```json
-{
-  "groupId": "groupId",
-  "type": "add_leader",
-  "proposedBy": "userId",
-  "targetUserId": "userId",
-  "proposedSettings": {
-    "requireApproval": false
-  },
-  "status": "pending",
-  "createdAt": "timestamp",
-  "expiresAt": "timestamp",
-  "resolvedAt": null,
-  "approvals": {
-    "leaderUserId": "timestamp"
-  },
-  "disputes": {
-    "leaderUserId": {
-      "createdAt": "timestamp"
-    }
-  }
-}
-```
-
-Allowed types:
-
-- `add_leader`
-- `remove_member`
-- `publishing_policy`
-
-Allowed statuses:
-
-- `pending`
-- `approved`
-- `disputed`
-- `expired_approved`
-- `cancelled`
-
-Group settings change records are visible only to current Leaders. Members, including a Member targeted for Leader access or removal, must not be able to read pending, disputed, cancelled, or expired settings change records. Proposed changes take effect only when all Leaders approve early or the 24-hour dispute window closes with no disputes. Any dispute cancels the change and remains visible to Leaders. A `remove_member` change marks the target membership as `removed` only after consensus completes.
+Leaders may read pending join requests for their groups. Approving a join request creates or activates the membership and requires a Leader device or trusted client flow to encrypt the active group key for the requester.
 
 ## `prayer_requests`
 
@@ -225,7 +192,7 @@ Stores encrypted request payloads plus non-sensitive routing metadata.
   "createdBy": "userId",
   "createdAt": "timestamp",
   "updatedAt": "timestamp",
-  "status": "pending_approval",
+  "status": "active",
   "anonymous": false,
   "keyVersion": 3,
   "payloadVersion": 1,
@@ -245,16 +212,47 @@ Encrypted payload contains title, body, private notes, sensitive tags, care deta
 
 Allowed statuses:
 
-- `pending_approval`
 - `active`
 - `answered`
 - `resolved`
 - `archived`
 - `deleted`
 
-`pending_approval` requests are not published to the whole group feed. The author and Leaders with approval permission may read the encrypted request, review it on-device after decryption, and transition it to `active` or another terminal status. Groups with `settings.requireApproval: false` should create requests directly as `active`.
+The default group feed shows `active` requests only, ordered from newest to oldest. `answered`, `resolved`, and `archived` requests remain stored statuses but do not appear in the default group feed. Leaders may remove another member's request by transitioning it to `deleted` or archive it when appropriate.
 
 Request authors may manage their own requests after creation. Updating a request must re-encrypt the title and body on-device before writing replacement ciphertext. Removing a request should transition it to `deleted` rather than deleting the document directly. Authors may also mark their own requests as `answered`.
+
+### Multi-Group Request Submission
+
+The home FAB opens a request composer where the user selects one or more active groups with checkboxes and a `Select All` option.
+
+Submitting to multiple groups must create one `prayer_requests` document per selected group. Each document uses that group's `groupId`, active `keyVersion`, ciphertext, and nonce. Do not create a shared multi-group plaintext record, and do not store a plaintext summary of which groups received the request.
+
+If some group writes fail, successful group writes remain submitted. The client should show calm partial-success copy and allow retry for failed groups.
+
+## `request_reports`
+
+Stores metadata-only request reports for Leader review. Reports must not include plaintext request title, body, summaries, tags, notes, or free-text reasons.
+
+```json
+{
+  "groupId": "groupId",
+  "requestId": "requestId",
+  "reportedBy": "userId",
+  "createdAt": "timestamp",
+  "status": "open",
+  "resolvedAt": null,
+  "resolvedBy": null
+}
+```
+
+Allowed statuses:
+
+- `open`
+- `dismissed`
+- `removed`
+
+Any active member may report a request in their group. Reports are visible only to Leaders in Group Settings. Leaders may dismiss a report, archive the request, or remove the reported request.
 
 ## `prayer_updates`
 
@@ -296,7 +294,135 @@ Stores lightweight care actions that do not expose prayer content.
 }
 ```
 
-Avoid public counters and engagement metrics in the UI even if aggregate counts are stored for product behavior.
+Prayer participation counts may be shown quietly as care context, such as `3 joining in prayer`. Do not present these actions as likes, reactions, rankings, streaks, or engagement metrics.
+
+## `prayer_sessions`
+
+Stores encrypted user-specific scheduled prayer session configuration plus minimal reminder metadata.
+
+```json
+{
+  "userId": "userId",
+  "createdAt": "timestamp",
+  "updatedAt": "timestamp",
+  "status": "active",
+  "sortOrder": 1000,
+  "reminder": {
+    "enabled": true,
+    "timeLocal": "07:30",
+    "timezone": "America/New_York",
+    "daysOfWeek": [1, 2, 3, 4, 5, 6, 7]
+  },
+  "payloadVersion": 1,
+  "algorithm": "xchacha20-poly1305",
+  "ciphertext": "base64",
+  "nonce": "base64"
+}
+```
+
+Encrypted payload contains session name, private labels, display preferences, and any custom data that could reveal spiritual habits. Reminder metadata is stored only to the extent required for scheduling generic reminders.
+
+Allowed statuses:
+
+- `active`
+- `archived`
+- `deleted`
+
+## `routine_sections`
+
+Stores ordered encrypted routine sections for a user's private prayer sessions.
+
+```json
+{
+  "userId": "userId",
+  "sessionId": "sessionId",
+  "createdAt": "timestamp",
+  "updatedAt": "timestamp",
+  "sortOrder": 2000,
+  "type": "custom_text",
+  "status": "active",
+  "payloadVersion": 1,
+  "algorithm": "xchacha20-poly1305",
+  "ciphertext": "base64",
+  "nonce": "base64"
+}
+```
+
+Allowed section types:
+
+- `custom_text`
+- `request_feed`
+- `heading`
+- `silence`
+- `reading_placeholder`
+
+Encrypted payload contains custom text, headings, labels, display options, request-feed slot configuration, and other user-authored routine content. A `request_feed` section stores placement and configuration only; it never stores request IDs or request content from a consolidated feed.
+
+## `personal_prayers`
+
+Stores user-supplied personal prayer book entries encrypted for the owning user.
+
+```json
+{
+  "userId": "userId",
+  "createdAt": "timestamp",
+  "updatedAt": "timestamp",
+  "status": "active",
+  "payloadVersion": 1,
+  "algorithm": "xchacha20-poly1305",
+  "ciphertext": "base64",
+  "nonce": "base64"
+}
+```
+
+Encrypted payload contains title, body, notes, tags, and user-authored prayer text. Personal prayers are encrypted only for the owning user unless intentionally included in a shared routine as custom text.
+
+## `shared_routines`
+
+Stores metadata for routines intentionally shared by a user.
+
+```json
+{
+  "createdBy": "userId",
+  "createdAt": "timestamp",
+  "updatedAt": "timestamp",
+  "status": "active",
+  "visibility": "direct",
+  "recipientUserIds": ["userId"],
+  "payloadVersion": 1,
+  "algorithm": "xchacha20-poly1305",
+  "ciphertext": "base64",
+  "nonce": "base64"
+}
+```
+
+Encrypted payload contains shared routine title, description, and any shared metadata. The routine's custom text sections are intentionally shared with recipients, but still must not be readable by Firebase operators.
+
+Allowed statuses:
+
+- `active`
+- `revoked`
+- `deleted`
+
+## `shared_routine_sections`
+
+Stores ordered sections for a shared routine.
+
+```json
+{
+  "sharedRoutineId": "sharedRoutineId",
+  "createdBy": "userId",
+  "createdAt": "timestamp",
+  "sortOrder": 1000,
+  "type": "request_feed",
+  "payloadVersion": 1,
+  "algorithm": "xchacha20-poly1305",
+  "ciphertext": "base64",
+  "nonce": "base64"
+}
+```
+
+For custom text sections, the encrypted payload contains the shared text and placement. For request-feed sections, the encrypted payload contains placement and display configuration only. It must not include the sharer's request IDs, request contents, group IDs as feed contents, or content-derived summaries.
 
 ## `devices`
 
@@ -322,15 +448,24 @@ Stores generic notification events.
   "userId": "userId",
   "groupId": "groupId",
   "requestId": "requestId",
+  "sessionId": "sessionId",
   "type": "new_request",
   "createdAt": "timestamp",
   "readAt": null
 }
 ```
 
-Notification documents and FCM payloads must not contain plaintext prayer request content.
+Notification documents and FCM payloads must not contain plaintext prayer request content, personal prayer content, routine custom text, or content-derived summaries.
 
-For groups that require approval, notification events for the full group should be created only after a request transitions to a published status. Approval queue notifications may route to approving Leaders, but must use generic event types and copy such as `pending_request_review`.
+Allowed generic notification types include:
+
+- `new_request`
+- `follow_up_reminder`
+- `prayer_session_reminder`
+- `join_request`
+- `admin_change`
+
+Prayer-session reminders should use generic copy such as `Time for prayer` or `Your prayer session is ready` unless the notification is generated locally on-device from decrypted data.
 
 ## `audit_events`
 
@@ -349,6 +484,20 @@ Stores security and administrative events without sensitive prayer text.
 }
 ```
 
+Allowed group admin types include:
+
+- `member_promoted`
+- `leader_demoted`
+- `member_removed`
+- `invite_code_created`
+- `invite_code_disabled`
+- `join_request_approved`
+- `join_request_rejected`
+- `request_removed`
+- `request_report_dismissed`
+
+Audit metadata must not include prayer plaintext, routine content, personal prayer text, or content-derived summaries.
+
 ## Indexing Strategy
 
 Recommended indexes:
@@ -360,29 +509,37 @@ Recommended indexes:
 - `invite_codes`: `groupId`, `status`, `createdAt`
 - `join_requests`: `groupId`, `status`, `createdAt`
 - `join_requests`: `requestedBy`, `status`, `createdAt`
-- `group_settings_changes`: `groupId`, `status`, `expiresAt`
 - `prayer_requests`: `groupId`, `status`, `updatedAt`
-- `prayer_requests`: `groupId`, `status`, `createdAt` for approval queues
+- `prayer_requests`: `groupId`, `status`, `createdAt` for group feeds
+- `request_reports`: `groupId`, `status`, `createdAt`
 - `prayer_updates`: `requestId`, `createdAt`
 - `prayer_actions`: `requestId`, `userId`, `type`
+- `prayer_sessions`: `userId`, `status`, `sortOrder`
+- `routine_sections`: `userId`, `sessionId`, `status`, `sortOrder`
+- `personal_prayers`: `userId`, `status`, `updatedAt`
+- `shared_routines`: `recipientUserIds`, `status`, `updatedAt` where supported by the chosen sharing model
+- `shared_routine_sections`: `sharedRoutineId`, `sortOrder`
 - `notifications`: `userId`, `readAt`, `createdAt`
+- `audit_events`: `groupId`, `createdAt`
 
-Avoid global feeds and cross-group queries.
+Avoid backend global feeds and cross-group request queries. The consolidated request organizer should be assembled client-side from active memberships and group-scoped request reads.
 
 ## Security Rules Requirements
 
 - Users may only read groups where they have an active membership.
 - Users may only read their own encrypted group keys.
 - Users may only create prayer requests for groups where they are active members.
-- Groups with approval enabled must restrict `pending_approval` request reads to the author and Leaders who can approve requests.
-- Group members may read published request statuses such as `active`, `answered`, `resolved`, and `archived` according to membership access.
+- Multi-group request submission must be validated as separate group-scoped writes.
+- Group members may read request statuses such as `active`, `answered`, `resolved`, and `archived` according to membership access.
+- Request reports may be created by active members and read or resolved only by Leaders.
 - Any active member may create invite codes when group settings allow member invites.
 - Join requests may be read by the requester and group Leaders, but only Leaders may approve or reject them.
-- Group settings change records may be read only by current Leaders and must never be readable by Members, including a targeted Member.
-- A Member's role may change to `leader`, and publishing policy may change, only after the group settings change workflow approves early or reaches the end of its dispute window without disputes.
+- Only Leaders may promote, demote, or remove members, and rules or backend validation must prevent removal or demotion of the last active Leader.
+- Users may only read and write their own private `prayer_sessions`, `routine_sections`, and `personal_prayers` unless an explicit encrypted sharing flow applies.
+- Shared routines may be read only by intended recipients or according to the chosen sharing visibility, and shared content must remain encrypted.
 - Anonymous Firebase users are prohibited.
 - Removed or blocked members cannot read future group content.
 - Clients cannot write server-owned fields such as aggregate counts without validation.
-- Cloud Functions must validate membership before fanout, invite, join request, or settings change operations.
+- Cloud Functions must validate membership before fanout, invite, join request, admin, or notification operations.
 
 Security rules protect access boundaries, not plaintext confidentiality. Encryption remains mandatory.

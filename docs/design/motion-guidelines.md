@@ -20,6 +20,9 @@ Use:
 - Slow easing
 - Soft haptics
 - Skeleton or shimmer alternatives that do not feel frantic
+- Gentle manuscript-style section reveals
+- Soft transitions into prayer sessions and routine sections
+- A clear but quiet FAB-to-composer transition
 
 Avoid:
 
@@ -29,6 +32,9 @@ Avoid:
 - Bouncy tab transitions
 - Flashy notification animations
 - Motion that imitates social media engagement loops
+- Page-flip gimmicks
+- Glittering gold or shimmering ornament effects
+- Decorative animation that competes with prayer text
 
 ## Timing
 
@@ -65,6 +71,13 @@ Recommended patterns:
 - Subtle horizontal slide for drill-in navigation
 - Bottom sheet rise for contextual actions
 - Crossfade for decrypted content becoming available
+- Fade or gentle reveal for illuminated dividers and section headers
+
+Prayer routine transitions should feel like moving through a quiet reading order. They should not imply a score, streak, or completion game.
+
+## Request Composer
+
+Opening the prayer request composer from the home FAB should preserve orientation and make the audience-selection step clear. Use a bottom sheet or full-screen composer depending on available space. The group checkbox list should appear without dramatic motion, and `Select All` state changes should be immediate and understandable.
 
 ## Prayer Interaction
 
@@ -100,3 +113,4 @@ When reduced motion is enabled:
 - Keep haptics optional.
 - Avoid parallax.
 - Keep progress indicators simple.
+- Disable ornamental section reveals and any page-like movement.
