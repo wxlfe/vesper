@@ -224,7 +224,7 @@ Request authors may manage their own requests after creation. Updating a request
 
 ### Multi-Group Request Submission
 
-The home FAB opens a request composer where the user selects one or more active groups with checkboxes and a `Select All` option.
+The centered bottom `+` request action opens a request composer where the user selects one or more active groups with checkboxes and a `Select All` option.
 
 Submitting to multiple groups must create one `prayer_requests` document per selected group. Each document uses that group's `groupId`, active `keyVersion`, ciphertext, and nonce. Do not create a shared multi-group plaintext record, and do not store a plaintext summary of which groups received the request.
 

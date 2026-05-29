@@ -14,6 +14,10 @@ Users need a private way to organize prayer around their own rhythms, user-suppl
 - Sync routine structure across the user's trusted devices.
 - Encrypt private routine content and personal prayers on-device.
 - Support routine sharing where custom text is shared but request-feed contents are recipient-specific.
+- Make the `Pray` tab the logged-in landing screen.
+- Present routines first in a horizontal row of circular icons.
+- Present the consolidated request feed below routines.
+- Guide users through selected routines one full-screen step at a time.
 
 ## Non-Goals
 
@@ -35,12 +39,26 @@ Users need a private way to organize prayer around their own rhythms, user-suppl
 - As a user, I can pray through a previously synced routine offline.
 - As a user, I can share a routine with another user.
 - As a recipient, I see the shared custom text, but the request-feed slot uses my own current request feed.
+- As a user, I land on the `Pray` tab after logging in.
+- As a user, I can see my routines in a horizontal circular-icon row.
+- As a user, I can create a routine even if I already have routines.
+- As a user, I can scroll my consolidated request feed below my routines.
+- As a user, I can move through a selected routine step-by-step in full-screen vertical steps.
+- As a user, I can join in prayer from a request step inside a routine.
 
 ## UX Notes
 
-The primary Prayer home should feel like opening a personal prayer book. It should emphasize the next scheduled session and provide calm access to other sessions and the prayer book.
+The `Pray` tab should feel like opening a personal prayer book. It is the signed-in landing tab and should show routines first, then the user's consolidated request feed.
+
+Routines should appear in a horizontally scrollable row of circular icons with short labels, visually similar to the layout pattern of Instagram Stories but without social-story behavior. Do not include viewers, public activity rings, expiration, reactions, streaks, or engagement indicators. A `Create Routine` action must remain visible whether the user has no routines, one routine, or many routines.
+
+Below the routine row, the consolidated request feed should show requests from all groups where the user is an active member. This feed remains private to the viewing user and assembled from group-scoped reads.
 
 Routine sections should be easy to scan and easy to reorder without feeling like task management. The app may use manuscript-inspired section dividers, rubrics, and initials, but reading clarity comes first.
+
+When a routine is selected, the Routine screen should guide the user through the routine one step at a time. A TikTok-like vertical full-screen scrolling list may be used as a layout pattern only: each routine step occupies the full screen, and the user moves vertically through the routine order. Avoid infinite feeds, autoplay, algorithmic recommendations, public metrics, or addictive motion.
+
+Request steps inside a routine should preserve the existing `Join in prayer` action.
 
 Vesper should not assume a specific prayer tradition in product copy. Users can build prayer offices, simple daily sessions, or any other structure themselves.
 
@@ -107,9 +125,15 @@ Routine edits and personal prayer edits may queue offline as encrypted pending w
 ## Acceptance Criteria
 
 - Users can create, rename, archive, and delete prayer sessions.
+- Users land on the `Pray` tab after login.
+- Routines appear above the request feed in a horizontal circular-icon row.
+- `Create Routine` remains visible regardless of routine count.
 - Users can add, edit, remove, and reorder routine sections.
 - Users can add a request-feed section to a routine.
 - The request-feed section renders the viewing user's current eligible requests.
+- The `Pray` tab shows a consolidated request feed below routines.
+- Selecting a routine opens a full-screen step-by-step routine reader.
+- Request steps preserve `Join in prayer`.
 - Users can enable a generic reminder for a session.
 - Private session and routine content syncs across the user's devices as encrypted payloads.
 - Vesper does not ship prayer-book or office text.

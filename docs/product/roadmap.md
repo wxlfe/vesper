@@ -18,10 +18,15 @@ Core features:
 - Authentication with email/password
 - User public key registration
 - Global illuminated manuscript design language
-- Primary Prayer home screen
-- Home FAB for creating a prayer request
+- Two-tab signed-in navigation: `Pray` and `Groups`
+- Centered bottom `+` action for submitting a prayer request
+- `Pray` tab as the post-login landing screen
+- `Pray` tab routine row with circular routine icons
+- Always-visible `Create Routine` action on the `Pray` tab
+- Consolidated request feed below routines on the `Pray` tab
 - Group checkbox selector in the request composer
 - `Select All` option for multi-group request submission
+- `Groups` tab containing group creation, joining, administration, and group-specific feeds
 - Group creation
 - Copyable group invite codes and Leader-approved join requests
 - Simplified Leader and Member roles
@@ -39,6 +44,7 @@ Core features:
 - User-defined scheduled prayer sessions
 - User-private prayer book
 - Routine builder with custom text sections, headings, silence, and request-feed sections
+- Full-screen step-by-step routine reader
 - Cross-device sync for encrypted routine structure and personal prayers
 - Generic prayer-session reminders
 - Dark mode
@@ -51,9 +57,12 @@ Success criteria:
 - Group members can read decrypted requests on trusted devices.
 - Request authors can update, remove, and mark their own requests as answered without exposing plaintext to Firestore.
 - Users can create a scheduled prayer session from user-supplied content.
+- Users land on the `Pray` tab after login.
+- Users can see routines first, then their consolidated request feed.
 - Users can place their request feed inside a prayer routine.
 - User-supplied prayer text and routine custom text are unreadable from Firebase Console.
-- Users can submit one request to one, many, or all of their groups from the home FAB.
+- Users can submit one request to one, many, or all of their groups from the centered bottom `+` action.
+- Users can move through a routine one full-screen step at a time without gamified progress or engagement mechanics.
 - Invite-code join requests show Leaders who requested access and who invited them.
 - Group administration feels simple, safe, and accountable without committee-style workflows.
 - The product feels like a calm, private, illuminated prayer book rather than a social feed or admin console.

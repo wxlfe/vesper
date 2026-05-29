@@ -58,6 +58,10 @@ End-to-end encrypted
 Mark as prayed
 Follow up reminder, tomorrow at 9 AM
 Create prayer request
+Submit prayer request
+Pray tab
+Groups tab
+Open Morning Prayer routine
 Select all groups
 ```
 
@@ -76,6 +80,17 @@ Respect platform reduced motion settings. Disable non-essential animation and re
 - Keep care actions reachable without requiring precise gestures.
 - Checkboxes in the request composer must have accessible labels and at least `44x44` touch targets.
 - The `Select All` group control must clearly announce checked, unchecked, or mixed state where supported.
+- The centered bottom `+` request action must be reachable, labeled, and not announced as a selected tab.
+- Routine row items must have accessible labels such as `Open Morning Prayer routine`.
+- `Create Routine` must remain reachable and must not be hidden behind horizontal scrolling.
+- Full-screen routine steps must provide accessible next and previous movement or equivalent semantics; vertical swiping must not be the only way to proceed.
+- The `Join in prayer` action must remain reachable without requiring double-tap or precise gesture input.
+
+## Routine Step Accessibility
+
+Full-screen routine steps must tolerate large text without clipping primary content or navigation controls. If a routine step cannot fit comfortably at large text sizes, allow internal scrolling within that step or simplify ornamentation before reducing text.
+
+Screen readers should announce the routine step position in calm language, such as `Step 2 of 6, Prayer requests`, without implying streaks, scores, or public progress.
 
 ## Cognitive Accessibility
 

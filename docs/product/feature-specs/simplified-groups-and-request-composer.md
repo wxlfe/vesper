@@ -2,14 +2,15 @@
 
 ## Problem
 
-Users need to share prayer requests with one or more trusted groups quickly from the prayer home, while Leaders need enough group administration to manage trust without heavy governance workflows.
+Users need to share prayer requests with one or more trusted groups quickly from the centered bottom request action, while Leaders need enough group administration to manage trust within the `Groups` tab without heavy governance workflows.
 
 ## Goals
 
-- Provide a home FAB for creating prayer requests.
+- Provide a centered bottom `+` action for creating prayer requests.
 - Let users choose one, many, or all eligible groups before submitting a request.
 - Encrypt one request per selected group using that group's active key.
 - Keep group administration to Leader/Member roles, join requests, reports, and admin history.
+- Keep group creation, joining, administration, and group-specific feeds inside the `Groups` tab.
 - Avoid approval queues, permission matrices, and consensus workflows in the MVP.
 - Keep all request content unreadable to Firebase and Cloud Functions.
 
@@ -24,7 +25,7 @@ Users need to share prayer requests with one or more trusted groups quickly from
 
 ## User Stories
 
-- As a user, I can tap a FAB on the Prayer home to create a prayer request.
+- As a user, I can tap the centered bottom `+` action from either tab to create a prayer request.
 - As a user, I can see the groups where I am an active member.
 - As a user, I can select groups with checkboxes.
 - As a user, I can choose `Select All` to submit to every eligible group.
@@ -37,7 +38,9 @@ Users need to share prayer requests with one or more trusted groups quickly from
 
 ## UX Notes
 
-The FAB should be available on the Prayer home and labeled for accessibility as `Create prayer request`. It should be visually clear without overpowering the prayer-book reading experience.
+The centered bottom `+` action should be available across the signed-in app and labeled for accessibility as `Submit prayer request` or `Create prayer request`. It should be visually clear without overpowering the prayer-book reading experience. It is a primary action, not a third tab, and should not show a selected navigation state.
+
+The bottom app bar should show `Pray` on the left, the centered `+` request action, and `Groups` on the right. Group creation, joining, invite codes, administration, and group-specific request feeds belong under `Groups`.
 
 The group selector should make audience selection explicit. Each group row should include a checkbox, group name, and optional quiet metadata. The `Select All` row should clearly indicate checked, unchecked, or mixed state where supported.
 
@@ -81,7 +84,8 @@ On replay, each group write should revalidate membership and active key version.
 
 ## Acceptance Criteria
 
-- The Prayer home includes a FAB for creating a prayer request.
+- The signed-in bottom app bar includes a centered `+` action for creating a prayer request.
+- The centered `+` action opens the request composer from either `Pray` or `Groups`.
 - The composer lists active groups where the user is a member.
 - Each group can be selected with a checkbox.
 - `Select All` selects all eligible groups.
@@ -91,6 +95,7 @@ On replay, each group write should revalidate membership and active key version.
 - A partial failure does not undo successful group submissions.
 - Request plaintext is never sent to Firestore, Cloud Functions, notifications, logs, analytics, or crash reporting.
 - Group administration uses only `Leader` and `Member` roles.
+- Group creation, joining, administration, and group-specific feeds are contained in the `Groups` tab.
 - Last-Leader demotion and removal are blocked.
 
 ## Open Questions

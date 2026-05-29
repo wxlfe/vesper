@@ -235,33 +235,34 @@ Avoid custom roles, permission matrices, 24-hour dispute windows, multi-Leader c
 
 ## Navigation Architecture
 
-Recommended bottom navigation:
+Recommended signed-in bottom app bar:
 
 ```text
-prayer
-groups
-prayer book
-profile
+pray        + request        groups
 ```
 
-The primary tab should be the user's prayer home, centered on the next scheduled prayer session and the user's private prayer routine.
+The signed-in app has two persistent tabs: `Pray` on the left and `Groups` on the right. A centered `+` request action sits between them. The center action opens the prayer request composer from either tab, but it is not a third tab and should not have a selected navigation state.
+
+After login, users should land on the `Pray` tab. Profile and account management should be available from secondary header or menu actions rather than as a bottom tab. Prayer book and routine management live within the `Pray` tab. Group creation, group joining, group administration, and group-specific feeds live within the `Groups` tab.
 
 ## Primary Screens
 
-### Prayer Home
+### Pray Tab
 
 Purpose:
 
-- Open the user's next scheduled prayer session
-- Provide calm access to prayer routines and the prayer book
-- Show request-feed context only where it supports the user's routine
-- Provide a FAB for creating a prayer request
+- Show the user's prayer routines, if any
+- Always provide a `Create Routine` action
+- Show the user's consolidated request feed below routines
+- Open selected routines into a step-by-step routine screen
 
-The prayer home should avoid dashboard clutter and social-media-style urgency.
+The `Pray` tab should avoid dashboard clutter and social-media-style urgency. Routines should appear first in a horizontal row of circular icons with short labels, visually similar to the layout pattern of Stories but without social-story mechanics. Do not use viewers, public rings, expiration, reactions, streaks, or engagement indicators.
+
+The `Create Routine` action should remain visible whether the user has routines or not. Below the routines row, the consolidated request feed should show prayer requests from all groups where the user is an active member. This feed is private to the viewing user, assembled client-side from group-scoped reads, and must not become a backend global feed.
 
 ### Request Composer
 
-The prayer request composer opens from the home FAB and lets the user choose the groups that should receive the request.
+The prayer request composer opens from the centered bottom `+` request action and lets the user choose the groups that should receive the request.
 
 Composer requirements:
 
@@ -276,7 +277,9 @@ Submitting to multiple groups creates separate prayer request records, one per s
 
 ### Prayer Session
 
-Displays a user-defined routine as a calm reading flow. A request-feed section inserts the user's available group requests where the user placed that section. The session should support resuming, skipping optional sections, and reading at large text sizes without turning prayer into a completion game.
+Displays a selected routine as a calm, step-by-step reading flow. The routine screen may use a TikTok-like vertical full-screen paging layout as a spatial pattern only: each routine step occupies the full viewport, and users move vertically through the ordered routine. It must not feel like an algorithmic infinite feed, entertainment feed, or engagement loop.
+
+A request-feed section inserts the user's available group requests where the user placed that section. Request steps must preserve the option to `Join in prayer` or mark the request as prayed for. The session should support resuming, skipping optional sections, accessible next/previous movement, and reading at large text sizes without turning prayer into a completion game.
 
 ### Prayer Book
 
@@ -284,7 +287,7 @@ Stores user-supplied personal prayers and routine text. Vesper should not includ
 
 ### Groups
 
-Displays pinned groups, user groups, and calm group context. Group cards should be lightweight and easy to scan. Long-pressing a group row may open a menu with secondary actions such as `Pin` or `Unpin`, `Share`, and `Leave` without replacing the primary tap target. Pinned groups are a local preference and should not affect membership or visibility.
+The `Groups` tab owns all group functionality: group creation, group joining, pinned groups, user groups, group-specific request feeds, invite codes, join requests, reports, member management, and group administration. Group cards should be lightweight and easy to scan. Long-pressing a group row may open a menu with secondary actions such as `Pin` or `Unpin`, `Share`, and `Leave` without replacing the primary tap target. Pinned groups are a local preference and should not affect membership or visibility.
 
 Group management should include invite codes, join requests, member roles, member removal, and metadata-only admin history without making the group feel bureaucratic.
 

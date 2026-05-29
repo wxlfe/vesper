@@ -221,24 +221,59 @@ Avoid excessive icons, filled icon sets, novelty religious symbols, and icons th
 
 ## Components
 
-### Prayer Home
+### Pray Tab
 
-The primary home screen should center the user's next prayer session or daily prayer routine. It should feel like opening a personal prayer book, not checking a dashboard.
+The `Pray` tab is the signed-in landing screen. It should feel like opening a personal prayer book, not checking a dashboard.
 
 Use:
 
-- A clear next scheduled prayer session
-- Quiet access to the user's prayer book
-- A request-feed preview only when it helps the routine
-- A floating action button for creating a prayer request
+- A horizontal routine row at the top
+- An always-visible `Create Routine` action
+- A consolidated request feed below routines
+- Quiet access to routine and prayer book editing inside the `Pray` tab
 
 Avoid dashboard clutter, rankings, public counts, streaks, or urgency-driven modules.
 
-### Floating Action Button
+### Bottom App Bar
 
-The home screen should include a FAB for creating a prayer request. It should be visually clear, reachable, and labeled for assistive technologies as `Create prayer request`.
+The signed-in app should use a bottom app bar with two tabs and a centered primary request action:
 
-The FAB may use a manuscript accent color such as oxblood, lapis, or malachite, but it must meet contrast requirements and should not dominate the reading experience.
+```text
+Pray        +        Groups
+```
+
+Rules:
+
+- `Pray` is the left tab and the default landing tab after login.
+- `Groups` is the right tab.
+- The centered `+` opens the request composer.
+- The centered `+` is not a tab and should not have a selected state.
+- Profile and account actions should live in secondary header or menu actions.
+
+The center action should be visually clear, reachable, and labeled for assistive technologies as `Submit prayer request` or `Create prayer request`. It may use a manuscript accent color such as oxblood, lapis, or malachite, but it must meet contrast requirements and should not dominate the reading experience.
+
+### Routine Row
+
+Routines on the `Pray` tab should appear in a horizontally scrollable row of circular icons with short labels, visually similar to the layout pattern of Instagram Stories but without social-story behavior.
+
+Use:
+
+- Circular routine icons with manuscript-inspired initials or quiet ornament
+- Short routine names below or near each icon
+- A clearly visible `Create Routine` control whether routines exist or not
+- Calm selected/pressed states that do not imply public activity
+
+Avoid:
+
+- Viewer indicators
+- Expiration rings
+- Public activity rings
+- Streaks
+- Reactions
+- Auto-advancing content
+- Algorithmic promotion of routines
+
+The routine row should sit vertically above the consolidated request feed.
 
 ### Prayer Request Composer
 
@@ -258,6 +293,8 @@ Submitting to multiple groups creates separate encrypted requests, one per selec
 
 Prayer routines are ordered collections of user-arranged sections. They may include custom text, headings, silence, and a request-feed section. The request-feed section is dynamically populated with requests available to the viewing user.
 
+Selecting a routine opens a routine screen that guides the user step-by-step through the routine. The routine screen may use a TikTok-like full-screen vertical paging layout as a spatial pattern only: each step takes up the full screen and the user scrolls vertically through the routine order. It must not borrow TikTok's engagement mechanics.
+
 Routine screens should emphasize reading flow:
 
 - Large readable serif text
@@ -265,8 +302,11 @@ Routine screens should emphasize reading flow:
 - Restrained illuminated dividers
 - Low-pressure progress through the routine
 - Easy exit and resume behavior
+- Accessible next and previous movement in addition to scrolling
 
-Avoid completion streaks, progress pressure, gamified rewards, or public completion indicators.
+Avoid completion streaks, progress pressure, gamified rewards, public completion indicators, autoplay, infinite feeds, algorithmic recommendations, and attention-seeking snap effects.
+
+Request steps inside a routine should preserve the existing `Join in prayer` action. Joining in prayer should remain personal and quiet, with no public reaction mechanics.
 
 ### Prayer Book Entry
 
@@ -282,7 +322,7 @@ Request authors may see owner-only actions to `Update`, `Remove`, or mark the re
 
 ### Group Administration
 
-Group administration should be lightweight and focused on membership and trust.
+Group administration should be lightweight and focused on membership and trust. All group creation, joining, administration, and group-specific request feeds belong in the `Groups` tab.
 
 Use:
 
