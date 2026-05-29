@@ -1,6 +1,6 @@
 import 'package:uuid/uuid.dart';
 
-enum GroupSettingsChangeType { addLeader, removeMember, publishingPolicy }
+enum GroupSettingsChangeType { addLeader, removeMember }
 
 enum GroupSettingsChangeStatus {
   pending,
@@ -22,7 +22,6 @@ class GroupSettingsChange {
     required this.approvals,
     required this.disputes,
     this.targetUserId,
-    this.requireApproval,
   });
 
   final String id;
@@ -35,7 +34,6 @@ class GroupSettingsChange {
   final Set<String> approvals;
   final Map<String, DateTime> disputes;
   final String? targetUserId;
-  final bool? requireApproval;
 
   GroupSettingsChange copyWith({
     GroupSettingsChangeStatus? status,
@@ -53,7 +51,6 @@ class GroupSettingsChange {
       approvals: approvals ?? this.approvals,
       disputes: disputes ?? this.disputes,
       targetUserId: targetUserId,
-      requireApproval: requireApproval,
     );
   }
 }
@@ -92,19 +89,6 @@ class GroupSettingsChangePolicy {
     );
   }
 
-  GroupSettingsChange createPublishingPolicyChange({
-    required String groupId,
-    required bool requireApproval,
-    required String proposedBy,
-  }) {
-    return _create(
-      groupId: groupId,
-      type: GroupSettingsChangeType.publishingPolicy,
-      proposedBy: proposedBy,
-      requireApproval: requireApproval,
-    );
-  }
-
   GroupSettingsChange resolve(
     GroupSettingsChange change, {
     required Set<String> currentLeaderIds,
@@ -128,7 +112,6 @@ class GroupSettingsChangePolicy {
     required GroupSettingsChangeType type,
     required String proposedBy,
     String? targetUserId,
-    bool? requireApproval,
   }) {
     final now = _clock();
     return GroupSettingsChange(
@@ -142,7 +125,6 @@ class GroupSettingsChangePolicy {
       approvals: {proposedBy},
       disputes: const {},
       targetUserId: targetUserId,
-      requireApproval: requireApproval,
     );
   }
 }

@@ -27,28 +27,25 @@ class PrayerRequestRepository {
 
   String get _uid => _auth.currentUser!.uid;
 
-  Stream<List<PrayerRequestSummary>> watchRequests(
-    VesperGroup group, {
-    required bool includePending,
-  }) {
-    final statuses = includePending
-        ? ['pending_approval', 'active', 'answered', 'resolved', 'archived']
-        : ['active', 'answered', 'resolved', 'archived'];
-    return _firestore
+  Stream<List<PrayerRequestSummary>> watchRequests(VesperGroup group) {
+    final statuses = groupFeedStatuses();
+    var query = _firestore
         .collection('prayer_requests')
-        .where('groupId', isEqualTo: group.id)
-        .where('status', whereIn: statuses)
-        .snapshots()
-        .asyncMap((snapshot) async {
-          final rawRecords = snapshot.docs
-              .map((doc) => {'id': doc.id, ...doc.data()})
-              .toList();
-          await _encryptedCache.cacheEncryptedRequests(group.id, rawRecords);
-          return _decryptRequests(
-            group,
-            snapshot.docs.map(_FirestoreRequestDoc.new),
-          );
-        });
+        .where('groupId', isEqualTo: group.id);
+    query = statuses.length == 1
+        ? query.where('status', isEqualTo: statuses.first)
+        : query.where('status', whereIn: statuses);
+    query = query.orderBy('createdAt', descending: true);
+    return query.snapshots().asyncMap((snapshot) async {
+      final rawRecords = snapshot.docs
+          .map((doc) => {'id': doc.id, ...doc.data()})
+          .toList();
+      await _encryptedCache.cacheEncryptedRequests(group.id, rawRecords);
+      return _decryptRequests(
+        group,
+        snapshot.docs.map(_FirestoreRequestDoc.new),
+      );
+    });
   }
 
   Future<List<PrayerRequestSummary>> readCachedRequests(
@@ -85,7 +82,7 @@ class PrayerRequestRepository {
       'createdBy': _uid,
       'createdAt': FieldValue.serverTimestamp(),
       'updatedAt': FieldValue.serverTimestamp(),
-      'status': group.requireApproval ? 'pending_approval' : 'active',
+      'status': newPrayerRequestStatus(),
       'anonymous': false,
       ...payload.toFirestore(),
       'metadata': {
@@ -148,6 +145,66 @@ class PrayerRequestRepository {
         });
   }
 
+  Stream<Map<String, PrayerActivity>> watchPrayerActivity(String groupId) {
+    return _firestore
+        .collection('prayer_actions')
+        .where('groupId', isEqualTo: groupId)
+        .snapshots()
+        .map(
+          (snapshot) => prayerActivityFromActions(
+            currentUserId: _uid,
+            actions: snapshot.docs.map(PrayerAction.fromDoc),
+          ),
+        );
+  }
+
+  Future<void> reportRequest(String groupId, String requestId) async {
+    await _firestore
+        .collection('request_reports')
+        .doc('${requestId}_$_uid')
+        .set({
+          'groupId': groupId,
+          'requestId': requestId,
+          'reportedBy': _uid,
+          'createdAt': FieldValue.serverTimestamp(),
+          'status': 'open',
+          'resolvedAt': null,
+          'resolvedBy': null,
+        });
+  }
+
+  Stream<List<RequestReport>> watchRequestReports(String groupId) {
+    return _firestore
+        .collection('request_reports')
+        .where('groupId', isEqualTo: groupId)
+        .where('status', isEqualTo: 'open')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.map(RequestReport.fromDoc).toList());
+  }
+
+  Future<void> dismissRequestReport(String reportId) async {
+    await _firestore.collection('request_reports').doc(reportId).update({
+      'status': 'dismissed',
+      'resolvedAt': FieldValue.serverTimestamp(),
+      'resolvedBy': _uid,
+    });
+  }
+
+  Future<void> removeReportedRequest(RequestReport report) async {
+    final batch = _firestore.batch();
+    batch.update(
+      _firestore.collection('prayer_requests').doc(report.requestId),
+      {'status': 'deleted', 'updatedAt': FieldValue.serverTimestamp()},
+    );
+    batch.update(_firestore.collection('request_reports').doc(report.id), {
+      'status': 'removed',
+      'resolvedAt': FieldValue.serverTimestamp(),
+      'resolvedBy': _uid,
+    });
+    await batch.commit();
+  }
+
   Future<void> setFollowUpReminder(
     String requestId,
     DateTime reminderAt,
@@ -203,6 +260,12 @@ class PrayerRequestRepository {
     requests.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return requests;
   }
+}
+
+String newPrayerRequestStatus() => 'active';
+
+List<String> groupFeedStatuses() {
+  return ['active'];
 }
 
 abstract class _RequestDoc {

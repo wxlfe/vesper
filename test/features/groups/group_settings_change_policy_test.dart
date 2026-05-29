@@ -34,14 +34,14 @@ void main() {
     expect(change.status, GroupSettingsChangeStatus.pending);
   });
 
-  test('publishing policy changes use the same approval window', () {
+  test('member removal changes use the approval window', () {
     final createdAt = DateTime.utc(2026, 5, 18);
     var now = createdAt;
     final policy = GroupSettingsChangePolicy(clock: () => now);
 
-    final change = policy.createPublishingPolicyChange(
+    final change = policy.createRemoveMemberChange(
       groupId: 'group-1',
-      requireApproval: false,
+      targetUserId: 'member-1',
       proposedBy: 'leader-1',
     );
     now = createdAt.add(const Duration(hours: 24));
@@ -58,9 +58,9 @@ void main() {
     final policy = GroupSettingsChangePolicy(
       clock: () => DateTime.utc(2026, 5, 18),
     );
-    final change = policy.createPublishingPolicyChange(
+    final change = policy.createAddLeaderChange(
       groupId: 'group-1',
-      requireApproval: true,
+      targetUserId: 'member-1',
       proposedBy: 'leader-1',
     );
 

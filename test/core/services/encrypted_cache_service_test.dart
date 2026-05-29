@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vesper/core/services/encrypted_cache_service.dart';
@@ -40,5 +41,28 @@ void main() {
     const service = EncryptedCacheService();
 
     expect(await service.readEncryptedRequests('group-1'), isEmpty);
+  });
+
+  test('stores Firestore timestamps as JSON-safe cached values', () async {
+    SharedPreferences.setMockInitialValues({});
+    const service = EncryptedCacheService();
+    final createdAt = Timestamp.fromDate(DateTime.utc(2026, 5, 20, 12));
+
+    await service.cacheEncryptedRequests('group-1', [
+      {
+        'id': 'request-1',
+        'groupId': 'group-1',
+        'ciphertext': 'ciphertext-base64',
+        'nonce': 'nonce-base64',
+        'keyVersion': 1,
+        'payloadVersion': 1,
+        'algorithm': 'xchacha20-poly1305',
+        'createdAt': createdAt,
+      },
+    ]);
+
+    final cached = await service.readEncryptedRequests('group-1');
+
+    expect(cached.single['createdAt'], createdAt);
   });
 }

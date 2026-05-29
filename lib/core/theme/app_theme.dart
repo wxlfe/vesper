@@ -1,17 +1,17 @@
 import 'package:flutter/material.dart';
 
 class AppTheme {
-  static const _lightBackground = Color(0xfff5f2f8);
+  static const _lightBackground = Color(0xfff4f6f0);
   static const _lightSurface = Color(0xffffffff);
-  static const _lightText = Color(0xff211f2d);
-  static const _lightSecondary = Color(0xff6f697d);
-  static const _lightAccent = Color(0xff6d5f99);
+  static const _lightText = Color(0xff242b24);
+  static const _lightSecondary = Color(0xff6a7267);
+  static const _lightAccent = Color(0xff5f725b);
 
-  static const _darkBackground = Color(0xff11101a);
-  static const _darkSurface = Color(0xff1c1a28);
-  static const _darkText = Color(0xfff3f0f8);
-  static const _darkSecondary = Color(0xffaaa3ba);
-  static const _darkAccent = Color(0xffa99ad6);
+  static const _darkBackground = Color(0xff111610);
+  static const _darkSurface = Color(0xff1b211a);
+  static const _darkText = Color(0xffedf2ea);
+  static const _darkSecondary = Color(0xffa9b1a5);
+  static const _darkAccent = Color(0xffa3b39d);
 
   static ThemeData get light => _theme(
     brightness: Brightness.light,

@@ -66,10 +66,7 @@ class GroupRepository {
     return _firestore
         .collection('prayer_requests')
         .where('groupId', isEqualTo: groupId)
-        .where(
-          'status',
-          whereIn: ['active', 'answered', 'resolved', 'archived'],
-        )
+        .where('status', isEqualTo: 'active')
         .snapshots()
         .map((snapshot) => snapshot.size);
   }
@@ -111,7 +108,6 @@ class GroupRepository {
   Future<void> createGroup({
     required String name,
     required String description,
-    required bool requireApproval,
   }) async {
     final groupDoc = _firestore.collection('groups').doc();
     final groupKey = _groupKeyService.newGroupKeyBytes();
@@ -131,11 +127,7 @@ class GroupRepository {
       'updatedAt': FieldValue.serverTimestamp(),
       'memberCount': 1,
       'activeKeyVersion': 1,
-      'settings': {
-        'allowAnonymous': false,
-        'requireApproval': requireApproval,
-        'allowMemberInvites': true,
-      },
+      'settings': {'allowAnonymous': false, 'allowMemberInvites': true},
     });
     batch.set(
       _firestore.collection('group_members').doc('${groupDoc.id}_$_uid'),
@@ -297,27 +289,13 @@ class GroupRepository {
     await _createSettingsChange(change);
   }
 
-  Future<void> proposePublishingPolicy(
-    String groupId,
-    bool requireApproval,
-  ) async {
-    final change = _settingsChangePolicy.createPublishingPolicyChange(
-      groupId: groupId,
-      requireApproval: requireApproval,
-      proposedBy: _uid,
-    );
-    await _createSettingsChange(change);
-  }
-
   Future<void> _createSettingsChange(GroupSettingsChange change) async {
     await _firestore.collection('group_settings_changes').doc(change.id).set({
       'groupId': change.groupId,
       'type': _changeTypeName(change.type),
       'proposedBy': change.proposedBy,
       'targetUserId': change.targetUserId,
-      'proposedSettings': change.requireApproval == null
-          ? {}
-          : {'requireApproval': change.requireApproval},
+      'proposedSettings': {},
       'status': 'pending',
       'createdAt': Timestamp.fromDate(change.createdAt),
       'expiresAt': Timestamp.fromDate(change.expiresAt),
@@ -366,10 +344,6 @@ class GroupRepository {
         type: _settingsChangeType(data['type'] as String? ?? ''),
         proposedBy: data['proposedBy'] as String,
         targetUserId: data['targetUserId'] as String?,
-        requireApproval:
-            (data['proposedSettings']
-                    as Map<String, dynamic>?)?['requireApproval']
-                as bool?,
         status: GroupSettingsChangeStatus.pending,
         createdAt: (data['createdAt'] as Timestamp).toDate(),
         expiresAt: (data['expiresAt'] as Timestamp).toDate(),
@@ -413,13 +387,6 @@ class GroupRepository {
             {'status': 'removed'},
           );
         }
-        if (resolved.type == GroupSettingsChangeType.publishingPolicy &&
-            resolved.requireApproval != null) {
-          batch.update(_firestore.collection('groups').doc(groupId), {
-            'settings.requireApproval': resolved.requireApproval,
-            'updatedAt': FieldValue.serverTimestamp(),
-          });
-        }
         await batch.commit();
       }
     }
@@ -439,13 +406,11 @@ class GroupRepository {
     return switch (type) {
       GroupSettingsChangeType.addLeader => 'add_leader',
       GroupSettingsChangeType.removeMember => 'remove_member',
-      GroupSettingsChangeType.publishingPolicy => 'publishing_policy',
     };
   }
 
   GroupSettingsChangeType _settingsChangeType(String value) {
     return switch (value) {
-      'publishing_policy' => GroupSettingsChangeType.publishingPolicy,
       'remove_member' => GroupSettingsChangeType.removeMember,
       _ => GroupSettingsChangeType.addLeader,
     };

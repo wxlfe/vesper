@@ -3,23 +3,23 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:vesper/core/theme/app_theme.dart';
 
 void main() {
-  test('light theme uses the twilight palette', () {
+  test('light theme uses the green palette', () {
     final theme = AppTheme.light;
 
-    expect(theme.scaffoldBackgroundColor, const Color(0xfff5f2f8));
+    expect(theme.scaffoldBackgroundColor, const Color(0xfff4f6f0));
     expect(theme.cardTheme.color, const Color(0xffffffff));
-    expect(theme.colorScheme.primary, const Color(0xff6d5f99));
-    expect(theme.textTheme.bodyLarge?.color, const Color(0xff211f2d));
-    expect(theme.textTheme.bodyMedium?.color, const Color(0xff6f697d));
+    expect(theme.colorScheme.primary, const Color(0xff5f725b));
+    expect(theme.textTheme.bodyLarge?.color, const Color(0xff242b24));
+    expect(theme.textTheme.bodyMedium?.color, const Color(0xff6a7267));
   });
 
-  test('dark theme uses the twilight palette', () {
+  test('dark theme uses the green palette', () {
     final theme = AppTheme.dark;
 
-    expect(theme.scaffoldBackgroundColor, const Color(0xff11101a));
-    expect(theme.cardTheme.color, const Color(0xff1c1a28));
-    expect(theme.colorScheme.primary, const Color(0xffa99ad6));
-    expect(theme.textTheme.bodyLarge?.color, const Color(0xfff3f0f8));
-    expect(theme.textTheme.bodyMedium?.color, const Color(0xffaaa3ba));
+    expect(theme.scaffoldBackgroundColor, const Color(0xff111610));
+    expect(theme.cardTheme.color, const Color(0xff1b211a));
+    expect(theme.colorScheme.primary, const Color(0xffa3b39d));
+    expect(theme.textTheme.bodyLarge?.color, const Color(0xffedf2ea));
+    expect(theme.textTheme.bodyMedium?.color, const Color(0xffa9b1a5));
   });
 }

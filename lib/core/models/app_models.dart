@@ -35,7 +35,6 @@ class VesperGroup {
     required this.description,
     required this.createdBy,
     required this.activeKeyVersion,
-    required this.requireApproval,
   });
 
   final String id;
@@ -43,19 +42,15 @@ class VesperGroup {
   final String description;
   final String createdBy;
   final int activeKeyVersion;
-  final bool requireApproval;
 
   factory VesperGroup.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final data = doc.data() ?? const <String, dynamic>{};
-    final settings =
-        data['settings'] as Map<String, dynamic>? ?? const <String, dynamic>{};
     return VesperGroup(
       id: doc.id,
       name: data['name'] as String? ?? 'Untitled group',
       description: data['description'] as String? ?? '',
       createdBy: data['createdBy'] as String? ?? '',
       activeKeyVersion: data['activeKeyVersion'] as int? ?? 1,
-      requireApproval: settings['requireApproval'] as bool? ?? true,
     );
   }
 }
@@ -137,4 +132,99 @@ class PrayerRequestSummary {
   final DateTime createdAt;
   final String title;
   final String body;
+}
+
+class PrayerAction {
+  const PrayerAction({
+    required this.requestId,
+    required this.userId,
+    required this.type,
+  });
+
+  final String requestId;
+  final String userId;
+  final String type;
+
+  factory PrayerAction.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data() ?? const <String, dynamic>{};
+    return PrayerAction(
+      requestId: data['requestId'] as String? ?? '',
+      userId: data['userId'] as String? ?? '',
+      type: data['type'] as String? ?? '',
+    );
+  }
+}
+
+class PrayerActivity {
+  const PrayerActivity({
+    required this.prayedCount,
+    required this.hasCurrentUserPrayed,
+  });
+
+  final int prayedCount;
+  final bool hasCurrentUserPrayed;
+}
+
+Map<String, PrayerActivity> prayerActivityFromActions({
+  required String currentUserId,
+  required Iterable<PrayerAction> actions,
+}) {
+  final prayedByRequest = <String, Set<String>>{};
+  for (final action in actions) {
+    if (action.type != 'prayed' ||
+        action.requestId.isEmpty ||
+        action.userId.isEmpty) {
+      continue;
+    }
+    prayedByRequest
+        .putIfAbsent(action.requestId, () => <String>{})
+        .add(action.userId);
+  }
+  return prayedByRequest.map(
+    (requestId, userIds) => MapEntry(
+      requestId,
+      PrayerActivity(
+        prayedCount: userIds.length,
+        hasCurrentUserPrayed: userIds.contains(currentUserId),
+      ),
+    ),
+  );
+}
+
+class RequestReport {
+  const RequestReport({
+    required this.id,
+    required this.groupId,
+    required this.requestId,
+    required this.reportedBy,
+    required this.status,
+    required this.createdAt,
+    this.resolvedAt,
+    this.resolvedBy,
+  });
+
+  final String id;
+  final String groupId;
+  final String requestId;
+  final String reportedBy;
+  final String status;
+  final DateTime createdAt;
+  final DateTime? resolvedAt;
+  final String? resolvedBy;
+
+  factory RequestReport.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data() ?? const <String, dynamic>{};
+    return RequestReport(
+      id: doc.id,
+      groupId: data['groupId'] as String? ?? '',
+      requestId: data['requestId'] as String? ?? '',
+      reportedBy: data['reportedBy'] as String? ?? '',
+      status: data['status'] as String? ?? 'open',
+      createdAt:
+          (data['createdAt'] as Timestamp?)?.toDate() ??
+          DateTime.fromMillisecondsSinceEpoch(0),
+      resolvedAt: (data['resolvedAt'] as Timestamp?)?.toDate(),
+      resolvedBy: data['resolvedBy'] as String?,
+    );
+  }
 }
