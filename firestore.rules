@@ -206,6 +206,58 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    match /prayer_sessions/{sessionId} {
+      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'active'
+        && request.resource.data.sortOrder is int
+        && request.resource.data.reminder is map
+        && validEncryptedPayload(request.resource.data);
+      allow update: if signedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.status in ['active', 'archived', 'deleted']
+        && request.resource.data.sortOrder is int
+        && request.resource.data.reminder is map
+        && validEncryptedPayload(request.resource.data);
+      allow delete: if false;
+    }
+
+    match /routine_sections/{sectionId} {
+      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.sessionId is string
+        && request.resource.data.sortOrder is int
+        && request.resource.data.type in ['custom_text', 'request_feed', 'heading', 'silence', 'reading_placeholder']
+        && request.resource.data.status == 'active'
+        && validEncryptedPayload(request.resource.data);
+      allow update: if signedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.sessionId == resource.data.sessionId
+        && request.resource.data.sortOrder is int
+        && request.resource.data.type in ['custom_text', 'request_feed', 'heading', 'silence', 'reading_placeholder']
+        && request.resource.data.status in ['active', 'deleted']
+        && validEncryptedPayload(request.resource.data);
+      allow delete: if false;
+    }
+
+    match /personal_prayers/{personalPrayerId} {
+      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      allow create: if signedIn()
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.status == 'active'
+        && validEncryptedPayload(request.resource.data);
+      allow update: if signedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.status in ['active', 'archived', 'deleted']
+        && validEncryptedPayload(request.resource.data);
+      allow delete: if false;
+    }
+
     match /notifications/{notificationId} {
       allow read, update: if signedIn() && resource.data.userId == request.auth.uid;
       allow create, delete: if false;

@@ -224,7 +224,16 @@ class PrayTab extends ConsumerWidget {
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 12),
-            if (snapshot.connectionState == ConnectionState.waiting)
+            if (snapshot.hasError) ...[
+              Builder(
+                builder: (context) {
+                  logGroupStreamError(snapshot.error, snapshot.stackTrace);
+                  return const EmptyCard(
+                    text: 'We could not load your groups.',
+                  );
+                },
+              ),
+            ] else if (snapshot.connectionState == ConnectionState.waiting)
               const Center(child: CircularProgressIndicator())
             else if (groups.isEmpty)
               const EmptyCard(
@@ -239,24 +248,68 @@ class PrayTab extends ConsumerWidget {
   }
 }
 
-class RoutineRow extends StatelessWidget {
+class RoutineRow extends ConsumerWidget {
   const RoutineRow({super.key});
 
   @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return StreamBuilder<List<PrayerSession>>(
+      stream: ref.watch(prayerSessionRepositoryProvider).watchSessions(),
+      builder: (context, snapshot) {
+        final sessions = snapshot.data ?? const <PrayerSession>[];
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Your routines',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              height: 128,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  const CreateRoutineButton(),
+                  for (final session in sessions)
+                    RoutineCircle(session: session),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class RoutineCircle extends StatelessWidget {
+  const RoutineCircle({super.key, required this.session});
+
+  final PrayerSession session;
+
+  @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Your routines', style: Theme.of(context).textTheme.titleLarge),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 128,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            children: const [CreateRoutineButton()],
+    final initial = session.name.trim().isEmpty
+        ? 'R'
+        : session.name.trim().characters.first.toUpperCase();
+    return SizedBox(
+      width: 96,
+      child: InkWell(
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => RoutineReaderScreen(session: session),
           ),
         ),
-      ],
+        borderRadius: BorderRadius.circular(48),
+        child: Column(
+          children: [
+            CircleAvatar(radius: 30, child: Text(initial)),
+            const SizedBox(height: 8),
+            Text(session.name, textAlign: TextAlign.center),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -268,19 +321,549 @@ class CreateRoutineButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       width: 96,
-      child: Column(
+      child: InkWell(
+        onTap: () => showModalBottomSheet<void>(
+          context: context,
+          isScrollControlled: true,
+          builder: (_) => const CreateRoutineSheet(),
+        ),
+        borderRadius: BorderRadius.circular(48),
+        child: Column(
+          children: [
+            CircleAvatar(
+              radius: 30,
+              backgroundColor: Theme.of(context).colorScheme.primary,
+              foregroundColor: Theme.of(context).colorScheme.onPrimary,
+              child: const Icon(Icons.add),
+            ),
+            const SizedBox(height: 8),
+            const Text('Create Routine', textAlign: TextAlign.center),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class CreateRoutineSheet extends ConsumerStatefulWidget {
+  const CreateRoutineSheet({super.key});
+
+  @override
+  ConsumerState<CreateRoutineSheet> createState() => _CreateRoutineSheetState();
+}
+
+class _CreateRoutineSheetState extends ConsumerState<CreateRoutineSheet> {
+  final _name = TextEditingController();
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        24,
+        24,
+        24,
+        MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: ListView(
+        shrinkWrap: true,
         children: [
-          CircleAvatar(
-            radius: 30,
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            foregroundColor: Theme.of(context).colorScheme.onPrimary,
-            child: const Icon(Icons.add),
+          Text(
+            'Create a routine',
+            style: Theme.of(context).textTheme.titleLarge,
           ),
-          const SizedBox(height: 8),
-          const Text('Create Routine', textAlign: TextAlign.center),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _name,
+            decoration: const InputDecoration(labelText: 'Routine name'),
+            textInputAction: TextInputAction.done,
+          ),
+          const SizedBox(height: 12),
+          ElevatedButton(
+            onPressed: _busy ? null : _create,
+            child: const Text('Create Routine'),
+          ),
         ],
       ),
     );
+  }
+
+  Future<void> _create() async {
+    if (_name.text.trim().isEmpty) {
+      _showMessage(context, 'Name this routine first.');
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      final session = await ref
+          .read(prayerSessionRepositoryProvider)
+          .createSession(_name.text);
+      if (mounted) {
+        final navigator = Navigator.of(context);
+        navigator.pop();
+        navigator.push(
+          MaterialPageRoute<void>(
+            builder: (_) => RoutineReaderScreen(session: session),
+          ),
+        );
+      }
+    } on Exception {
+      if (mounted) _showMessage(context, 'This routine could not be created.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+}
+
+class RoutineReaderScreen extends ConsumerWidget {
+  const RoutineReaderScreen({super.key, required this.session});
+
+  final PrayerSession session;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(session.name),
+        actions: [
+          IconButton(
+            onPressed: () => showModalBottomSheet<void>(
+              context: context,
+              isScrollControlled: true,
+              builder: (_) => RoutineEditSheet(session: session),
+            ),
+            icon: const Icon(Icons.edit_outlined),
+            tooltip: 'Edit routine',
+          ),
+        ],
+      ),
+      body: StreamBuilder<List<RoutineSection>>(
+        stream: ref
+            .watch(prayerSessionRepositoryProvider)
+            .watchSections(session.id),
+        builder: (context, snapshot) {
+          final sections = sortedRoutineSections(snapshot.data ?? const []);
+          if (sections.isEmpty) {
+            return const Center(
+              child: EmptyCard(text: 'Add a section to begin this routine.'),
+            );
+          }
+          return PageView.builder(
+            scrollDirection: Axis.vertical,
+            itemCount: sections.length,
+            itemBuilder: (context, index) => RoutineStepPage(
+              session: session,
+              section: sections[index],
+              stepNumber: index + 1,
+              stepCount: sections.length,
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class RoutineStepPage extends StatelessWidget {
+  const RoutineStepPage({
+    super.key,
+    required this.session,
+    required this.section,
+    required this.stepNumber,
+    required this.stepCount,
+  });
+
+  final PrayerSession session;
+  final RoutineSection section;
+  final int stepNumber;
+  final int stepCount;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Step $stepNumber of $stepCount',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 24),
+            Text(
+              section.title.isEmpty ? session.name : section.title,
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: SingleChildScrollView(
+                child: RoutineSectionBody(section: section),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class RoutineSectionBody extends ConsumerWidget {
+  const RoutineSectionBody({super.key, required this.section});
+
+  final RoutineSection section;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (section.type == RoutineSectionType.requestFeed) {
+      return StreamBuilder<List<VesperGroup>>(
+        stream: ref.watch(groupRepositoryProvider).watchMyGroups(),
+        builder: (context, snapshot) {
+          final groups = snapshot.data ?? const <VesperGroup>[];
+          if (groups.isEmpty) {
+            return const Text('No requests are ready here yet.');
+          }
+          return ConsolidatedRequestFeed(groups: groups);
+        },
+      );
+    }
+    if (section.type == RoutineSectionType.silence) {
+      return Text(section.text.isEmpty ? 'Keep silence.' : section.text);
+    }
+    return Text(section.text);
+  }
+}
+
+class RoutineEditSheet extends ConsumerStatefulWidget {
+  const RoutineEditSheet({super.key, required this.session});
+
+  final PrayerSession session;
+
+  @override
+  ConsumerState<RoutineEditSheet> createState() => _RoutineEditSheetState();
+}
+
+class _RoutineEditSheetState extends ConsumerState<RoutineEditSheet> {
+  final _name = TextEditingController();
+  final _title = TextEditingController();
+  final _text = TextEditingController();
+  RoutineSection? _editingSection;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _name.text = widget.session.name;
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _title.dispose();
+    _text.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(
+        24,
+        24,
+        24,
+        MediaQuery.of(context).viewInsets.bottom + 24,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Edit routine', style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _name,
+            decoration: const InputDecoration(labelText: 'Routine name'),
+          ),
+          const SizedBox(height: 8),
+          ElevatedButton(
+            onPressed: _busy ? null : _saveName,
+            child: const Text('Save routine name'),
+          ),
+          const SizedBox(height: 16),
+          Text('Sections', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          StreamBuilder<List<RoutineSection>>(
+            stream: ref
+                .watch(prayerSessionRepositoryProvider)
+                .watchSections(widget.session.id),
+            builder: (context, snapshot) {
+              final sections = sortedRoutineSections(snapshot.data ?? const []);
+              return Column(
+                children: [
+                  for (final section in sections)
+                    ListTile(
+                      title: Text(
+                        section.title.isEmpty
+                            ? section.type.toString()
+                            : section.title,
+                      ),
+                      subtitle: Text(routineSectionTypeToString(section.type)),
+                      trailing: Wrap(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.arrow_upward),
+                            tooltip: 'Move ${section.title} up',
+                            onPressed: _busy
+                                ? null
+                                : () => _moveSection(section, sections, -1),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.arrow_downward),
+                            tooltip: 'Move ${section.title} down',
+                            onPressed: _busy
+                                ? null
+                                : () => _moveSection(section, sections, 1),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined),
+                            tooltip: 'Edit ${section.title}',
+                            onPressed: _busy ? null : () => _edit(section),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.remove_circle_outline),
+                            tooltip: 'Remove ${section.title}',
+                            onPressed: _busy ? null : () => _remove(section.id),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+          Text('Add a section', style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _title,
+            decoration: const InputDecoration(labelText: 'Section title'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _text,
+            decoration: const InputDecoration(labelText: 'Section text'),
+            minLines: 4,
+            maxLines: 8,
+          ),
+          const SizedBox(height: 12),
+          ElevatedButton(
+            onPressed: _busy ? null : _saveOrAddCustomText,
+            child: Text(
+              _editingSection == null ? 'Add custom text' : 'Save section',
+            ),
+          ),
+          TextButton(
+            onPressed: _busy ? null : _addRequestFeed,
+            child: const Text('Add request feed'),
+          ),
+          TextButton(
+            onPressed: _busy
+                ? null
+                : () => _addSection(RoutineSectionType.heading),
+            child: const Text('Add heading'),
+          ),
+          TextButton(
+            onPressed: _busy
+                ? null
+                : () => _addSection(RoutineSectionType.silence),
+            child: const Text('Add silence'),
+          ),
+          TextButton(
+            onPressed: _busy
+                ? null
+                : () => _addSection(RoutineSectionType.readingPlaceholder),
+            child: const Text('Add reading placeholder'),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton(
+            onPressed: _busy ? null : _archiveRoutine,
+            child: const Text('Archive routine'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _edit(RoutineSection section) {
+    setState(() {
+      _editingSection = section;
+      _title.text = section.title;
+      _text.text = section.text;
+    });
+  }
+
+  Future<void> _saveName() async {
+    if (_name.text.trim().isEmpty) {
+      _showMessage(context, 'Name this routine first.');
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(prayerSessionRepositoryProvider)
+          .updateSessionName(widget.session, _name.text);
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Routine name updated.')));
+      }
+    } on Exception {
+      if (mounted) _showMessage(context, 'Could not rename routine.');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _remove(String sectionId) async {
+    setState(() => _busy = true);
+    try {
+      await ref.read(prayerSessionRepositoryProvider).removeSection(sectionId);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _moveSection(
+    RoutineSection section,
+    List<RoutineSection> sections,
+    int direction,
+  ) async {
+    final index = sections.indexWhere((item) => item.id == section.id);
+    final targetIndex = index + direction;
+    if (index < 0 || targetIndex < 0 || targetIndex >= sections.length) return;
+    final target = sections[targetIndex];
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(prayerSessionRepositoryProvider)
+          .updateSection(
+            RoutineSection(
+              id: section.id,
+              sessionId: section.sessionId,
+              userId: section.userId,
+              type: section.type,
+              sortOrder: target.sortOrder,
+              status: section.status,
+              title: section.title,
+              text: section.text,
+            ),
+          );
+      await ref
+          .read(prayerSessionRepositoryProvider)
+          .updateSection(
+            RoutineSection(
+              id: target.id,
+              sessionId: target.sessionId,
+              userId: target.userId,
+              type: target.type,
+              sortOrder: section.sortOrder,
+              status: target.status,
+              title: target.title,
+              text: target.text,
+            ),
+          );
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _saveOrAddCustomText() async {
+    final editingSection = _editingSection;
+    if (editingSection == null) {
+      await _addSection(RoutineSectionType.customText);
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(prayerSessionRepositoryProvider)
+          .updateSection(
+            RoutineSection(
+              id: editingSection.id,
+              sessionId: editingSection.sessionId,
+              userId: editingSection.userId,
+              type: editingSection.type,
+              sortOrder: editingSection.sortOrder,
+              status: editingSection.status,
+              title: _title.text,
+              text: _text.text,
+            ),
+          );
+      if (mounted) {
+        setState(() {
+          _editingSection = null;
+          _title.clear();
+          _text.clear();
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _addSection(RoutineSectionType type) async {
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(prayerSessionRepositoryProvider)
+          .addSection(
+            sessionId: widget.session.id,
+            type: type,
+            title: _title.text,
+            text: _text.text,
+          );
+      if (mounted) {
+        setState(() {
+          _title.clear();
+          _text.clear();
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _addRequestFeed() async {
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(prayerSessionRepositoryProvider)
+          .addSection(
+            sessionId: widget.session.id,
+            type: RoutineSectionType.requestFeed,
+            title: 'Prayer requests',
+            text: '',
+          );
+      if (mounted) _title.clear();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _archiveRoutine() async {
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(prayerSessionRepositoryProvider)
+          .archiveSession(widget.session.id);
+      if (mounted) Navigator.of(context).pop();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 }
 
@@ -1064,16 +1647,8 @@ class RequestList extends ConsumerWidget {
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           logRequestStreamError(snapshot.error, snapshot.stackTrace);
-          return FutureBuilder<List<PrayerRequestSummary>>(
-            future: ref
-                .watch(prayerRequestRepositoryProvider)
-                .readCachedRequests(group),
-            builder: (context, cached) => RequestCards(
-              group: group,
-              requests: cached.data ?? const [],
-              isLeader: isLeader,
-              offline: true,
-            ),
+          return EmptyCard(
+            text: 'We could not load requests for ${group.name}.',
           );
         }
         return StreamBuilder<Map<String, PrayerActivity>>(
@@ -1097,6 +1672,13 @@ void logRequestStreamError(Object? error, StackTrace? stackTrace) {
   debugPrint('Request stream error: $error');
   if (stackTrace != null) {
     debugPrint('Request stream stack: $stackTrace');
+  }
+}
+
+void logGroupStreamError(Object? error, StackTrace? stackTrace) {
+  debugPrint('Group stream error: $error');
+  if (stackTrace != null) {
+    debugPrint('Group stream stack: $stackTrace');
   }
 }
 

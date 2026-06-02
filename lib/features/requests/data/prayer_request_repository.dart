@@ -220,15 +220,14 @@ class PrayerRequestRepository {
     VesperGroup group,
     Iterable<_RequestDoc> docs,
   ) async {
-    final groupKey = await _groupRepository.loadGroupKey(
-      group.id,
-      group.activeKeyVersion,
-    );
+    final groupKeys = <int, List<int>>{};
     final requests = <PrayerRequestSummary>[];
     for (final doc in docs) {
       final data = doc.data();
       try {
         final payload = EncryptedPayload.fromFirestore(data);
+        final groupKey = groupKeys[payload.keyVersion] ??=
+            await _groupRepository.loadGroupKey(group.id, payload.keyVersion);
         final decrypted = await _encryptionService.decryptJson(
           key: SecretKey(groupKey),
           context: EncryptionContext(
@@ -238,6 +237,15 @@ class PrayerRequestRepository {
             keyVersion: payload.keyVersion,
             payloadVersion: payload.payloadVersion,
           ),
+          fallbackContexts: [
+            LegacyGroupEncryptionContext(
+              collection: 'prayer_requests',
+              documentId: doc.id,
+              groupId: group.id,
+              keyVersion: payload.keyVersion,
+              payloadVersion: payload.payloadVersion,
+            ),
+          ],
           payload: payload,
         );
         requests.add(

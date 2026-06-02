@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:cryptography/cryptography.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -14,6 +15,7 @@ class KeyManager {
 
   String _privateKeyKey(String userId) => 'vesper.user.$userId.privateKey';
   String _publicKeyKey(String userId) => 'vesper.user.$userId.publicKey';
+  String _userContentKeyKey(String userId) => 'vesper.user.$userId.contentKey';
   String _groupKeyKey(String groupId, int keyVersion) =>
       'vesper.group.$groupId.key.$keyVersion';
 
@@ -70,5 +72,16 @@ class KeyManager {
   Future<List<int>?> readCachedGroupKey(String groupId, int keyVersion) async {
     final encoded = await _storage.read(key: _groupKeyKey(groupId, keyVersion));
     return encoded == null ? null : base64Decode(encoded);
+  }
+
+  Future<List<int>> ensureUserContentKey(String userId) async {
+    final existing = await _storage.read(key: _userContentKeyKey(userId));
+    if (existing != null) return base64Decode(existing);
+    final key = List<int>.generate(32, (_) => Random.secure().nextInt(256));
+    await _storage.write(
+      key: _userContentKeyKey(userId),
+      value: base64Encode(key),
+    );
+    return key;
   }
 }

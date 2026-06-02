@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:cryptography/cryptography.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vesper/core/crypto/encryption_service.dart';
 
@@ -86,4 +87,103 @@ void main() {
     expect(encoded, isNot(contains('Sensitive body')));
     expect(payload.toFirestore().keys, containsAll(['ciphertext', 'nonce']));
   });
+
+  test('rejects routine ciphertext when owner context changes', () async {
+    final service = EncryptionService();
+    final key = service.newGroupKey();
+    final payload = await service.encryptJson(
+      key: key,
+      context: const EncryptionContext(
+        collection: 'prayer_sessions',
+        documentId: 'session-1',
+        scopeId: 'user-1',
+        keyVersion: 1,
+        payloadVersion: 1,
+      ),
+      value: const {'name': 'Morning Prayer'},
+    );
+
+    expect(
+      () => service.decryptJson(
+        key: key,
+        context: const EncryptionContext(
+          collection: 'prayer_sessions',
+          documentId: 'session-1',
+          scopeId: 'user-2',
+          keyVersion: 1,
+          payloadVersion: 1,
+        ),
+        payload: payload,
+      ),
+      throwsA(isA<EncryptedPayloadException>()),
+    );
+  });
+
+  test('decrypts prayer requests encrypted with legacy groupId AAD', () async {
+    final service = EncryptionService();
+    final key = service.newGroupKey();
+    final payload = await _encryptWithLegacyGroupIdAad(
+      key: key,
+      collection: 'prayer_requests',
+      documentId: 'request-1',
+      groupId: 'group-1',
+      value: const {'title': 'Legacy request', 'body': 'Still visible'},
+    );
+
+    final decrypted = await service.decryptJson(
+      key: key,
+      context: const EncryptionContext(
+        collection: 'prayer_requests',
+        documentId: 'request-1',
+        groupId: 'group-1',
+        keyVersion: 1,
+        payloadVersion: 1,
+      ),
+      fallbackContexts: const [
+        LegacyGroupEncryptionContext(
+          collection: 'prayer_requests',
+          documentId: 'request-1',
+          groupId: 'group-1',
+          keyVersion: 1,
+          payloadVersion: 1,
+        ),
+      ],
+      payload: payload,
+    );
+
+    expect(decrypted['title'], 'Legacy request');
+    expect(decrypted['body'], 'Still visible');
+  });
+}
+
+Future<EncryptedPayload> _encryptWithLegacyGroupIdAad({
+  required SecretKey key,
+  required String collection,
+  required String documentId,
+  required String groupId,
+  required Map<String, dynamic> value,
+}) async {
+  final nonce = List<int>.generate(24, (index) => index + 1);
+  final secretBox = await Xchacha20.poly1305Aead().encrypt(
+    utf8.encode(jsonEncode(value)),
+    secretKey: key,
+    nonce: nonce,
+    aad: utf8.encode(
+      jsonEncode({
+        'collection': collection,
+        'documentId': documentId,
+        'groupId': groupId,
+        'keyVersion': 1,
+        'payloadVersion': 1,
+      }),
+    ),
+  );
+
+  return EncryptedPayload(
+    ciphertext: base64Encode(secretBox.concatenation(nonce: false)),
+    nonce: base64Encode(nonce),
+    keyVersion: 1,
+    payloadVersion: 1,
+    algorithm: EncryptionService.algorithmName,
+  );
 }

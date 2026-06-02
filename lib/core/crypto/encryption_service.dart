@@ -7,14 +7,15 @@ class EncryptionContext {
   const EncryptionContext({
     required this.collection,
     required this.documentId,
-    required this.groupId,
+    String? groupId,
+    String? scopeId,
     required this.keyVersion,
     required this.payloadVersion,
-  });
+  }) : scopeId = scopeId ?? groupId ?? '';
 
   final String collection;
   final String documentId;
-  final String groupId;
+  final String scopeId;
   final int keyVersion;
   final int payloadVersion;
 
@@ -23,7 +24,33 @@ class EncryptionContext {
       jsonEncode({
         'collection': collection,
         'documentId': documentId,
-        'groupId': groupId,
+        'scopeId': scopeId,
+        'keyVersion': keyVersion,
+        'payloadVersion': payloadVersion,
+      }),
+    );
+  }
+}
+
+class LegacyGroupEncryptionContext extends EncryptionContext {
+  const LegacyGroupEncryptionContext({
+    required super.collection,
+    required super.documentId,
+    required String groupId,
+    required super.keyVersion,
+    required super.payloadVersion,
+  }) : _groupId = groupId,
+       super(groupId: groupId);
+
+  final String _groupId;
+
+  @override
+  List<int> toAad() {
+    return utf8.encode(
+      jsonEncode({
+        'collection': collection,
+        'documentId': documentId,
+        'groupId': _groupId,
         'keyVersion': keyVersion,
         'payloadVersion': payloadVersion,
       }),
@@ -115,6 +142,7 @@ class EncryptionService {
   Future<Map<String, dynamic>> decryptJson({
     required SecretKey key,
     required EncryptionContext context,
+    List<EncryptionContext> fallbackContexts = const [],
     required EncryptedPayload payload,
   }) async {
     if (payload.algorithm != algorithmName) {
@@ -123,6 +151,33 @@ class EncryptionService {
       );
     }
 
+    final contexts = [context, ...fallbackContexts];
+    EncryptedPayloadException? lastAuthenticationError;
+    for (final candidateContext in contexts) {
+      try {
+        return await _decryptJsonWithContext(
+          key: key,
+          context: candidateContext,
+          payload: payload,
+        );
+      } on EncryptedPayloadException catch (error) {
+        if (error.message != 'Encrypted payload could not be opened.') {
+          rethrow;
+        }
+        lastAuthenticationError = error;
+      }
+    }
+    throw lastAuthenticationError ??
+        const EncryptedPayloadException(
+          'Encrypted payload could not be opened.',
+        );
+  }
+
+  Future<Map<String, dynamic>> _decryptJsonWithContext({
+    required SecretKey key,
+    required EncryptionContext context,
+    required EncryptedPayload payload,
+  }) async {
     try {
       final encryptedBytes = base64Decode(payload.ciphertext);
       final secretBox = SecretBox(

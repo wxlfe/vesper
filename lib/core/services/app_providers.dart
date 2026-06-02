@@ -10,6 +10,7 @@ import 'package:vesper/features/groups/data/group_repository.dart';
 import 'package:vesper/features/groups/data/pinned_group_service.dart';
 import 'package:vesper/features/groups/domain/invite_code_service.dart';
 import 'package:vesper/features/groups/domain/group_settings_change_policy.dart';
+import 'package:vesper/features/prayer/data/prayer_session_repository.dart';
 import 'package:vesper/features/profile/data/user_profile_repository.dart';
 import 'package:vesper/features/requests/data/prayer_request_repository.dart';
 
@@ -77,6 +78,17 @@ final prayerRequestRepositoryProvider = Provider<PrayerRequestRepository>((
     encryptionService: ref.watch(encryptionServiceProvider),
     groupRepository: ref.watch(groupRepositoryProvider),
     encryptedCache: ref.watch(encryptedCacheProvider),
+  );
+});
+
+final prayerSessionRepositoryProvider = Provider<PrayerSessionRepository>((
+  ref,
+) {
+  return PrayerSessionRepository(
+    auth: ref.watch(firebaseAuthProvider),
+    firestore: ref.watch(firestoreProvider),
+    encryptionService: ref.watch(encryptionServiceProvider),
+    keyManager: ref.watch(keyManagerProvider),
   );
 });
 

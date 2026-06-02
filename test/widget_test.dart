@@ -8,6 +8,7 @@ import 'package:vesper/core/models/app_models.dart';
 import 'package:vesper/core/services/app_providers.dart';
 import 'package:vesper/features/auth/data/auth_repository.dart';
 import 'package:vesper/features/groups/data/group_repository.dart';
+import 'package:vesper/features/prayer/data/prayer_session_repository.dart';
 import 'package:vesper/features/requests/data/prayer_request_repository.dart';
 import 'package:vesper/features/profile/data/user_profile_repository.dart';
 
@@ -54,12 +55,17 @@ class _FakeAuthRepository implements AuthRepository {
 }
 
 class _FakeGroupRepository implements GroupRepository {
-  const _FakeGroupRepository(this.groups);
+  const _FakeGroupRepository(this.groups, {this.watchMyGroupsError});
 
   final List<VesperGroup> groups;
+  final Object? watchMyGroupsError;
 
   @override
-  Stream<List<VesperGroup>> watchMyGroups() => Stream.value(groups);
+  Stream<List<VesperGroup>> watchMyGroups() {
+    final error = watchMyGroupsError;
+    if (error != null) return Stream.error(error);
+    return Stream.value(groups);
+  }
 
   @override
   Stream<int> watchRequestCount(String groupId) => Stream.value(0);
@@ -140,15 +146,22 @@ class _FakeGroupRepository implements GroupRepository {
 }
 
 class _FakePrayerRequestRepository implements PrayerRequestRepository {
-  const _FakePrayerRequestRepository({this.requests = const []});
+  const _FakePrayerRequestRepository({
+    this.requests = const [],
+    this.watchRequestsError,
+  });
 
   final List<PrayerRequestSummary> requests;
+  final Object? watchRequestsError;
 
   @override
-  Stream<List<PrayerRequestSummary>> watchRequests(VesperGroup group) =>
-      Stream.value(
-        requests.where((request) => request.groupId == group.id).toList(),
-      );
+  Stream<List<PrayerRequestSummary>> watchRequests(VesperGroup group) {
+    final error = watchRequestsError;
+    if (error != null) return Stream.error(error);
+    return Stream.value(
+      requests.where((request) => request.groupId == group.id).toList(),
+    );
+  }
 
   @override
   Future<List<PrayerRequestSummary>> readCachedRequests(
@@ -203,6 +216,76 @@ class _FakePrayerRequestRepository implements PrayerRequestRepository {
   ) async {}
 }
 
+class _FakePrayerSessionRepository implements PrayerSessionRepository {
+  const _FakePrayerSessionRepository({
+    this.sessions = const [],
+    this.sections = const [],
+    this.createdNames,
+    this.updatedSections,
+    this.removedSectionIds,
+    this.archivedSessionIds,
+    this.addedSectionTypes,
+  });
+
+  final List<PrayerSession> sessions;
+  final List<RoutineSection> sections;
+  final List<String>? createdNames;
+  final List<RoutineSection>? updatedSections;
+  final List<String>? removedSectionIds;
+  final List<String>? archivedSessionIds;
+  final List<RoutineSectionType>? addedSectionTypes;
+
+  @override
+  Stream<List<PrayerSession>> watchSessions() => Stream.value(sessions);
+
+  @override
+  Stream<List<RoutineSection>> watchSections(String sessionId) => Stream.value(
+    sections.where((section) => section.sessionId == sessionId).toList(),
+  );
+
+  @override
+  Future<PrayerSession> createSession(String name) async {
+    createdNames?.add(name.trim());
+    return PrayerSession(
+      id: 'created-session',
+      userId: 'user-1',
+      status: 'active',
+      sortOrder: 1000,
+      name: name.trim(),
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+    );
+  }
+
+  @override
+  Future<void> updateSessionName(PrayerSession session, String name) async {}
+
+  @override
+  Future<void> archiveSession(String sessionId) async {
+    archivedSessionIds?.add(sessionId);
+  }
+
+  @override
+  Future<void> addSection({
+    required String sessionId,
+    required RoutineSectionType type,
+    required String title,
+    required String text,
+  }) async {
+    addedSectionTypes?.add(type);
+  }
+
+  @override
+  Future<void> updateSection(RoutineSection section) async {
+    updatedSections?.add(section);
+  }
+
+  @override
+  Future<void> removeSection(String sectionId) async {
+    removedSectionIds?.add(sectionId);
+  }
+}
+
 void main() {
   const testGroups = [
     VesperGroup(
@@ -251,6 +334,9 @@ void main() {
             userProfileRepositoryProvider.overrideWithValue(
               const _FakeUserProfileRepository({'user-2': 'Sarah Chen'}),
             ),
+            prayerSessionRepositoryProvider.overrideWithValue(
+              const _FakePrayerSessionRepository(),
+            ),
           ],
           child: const MaterialApp(home: HomeScreen()),
         ),
@@ -289,6 +375,9 @@ void main() {
             prayerRequestRepositoryProvider.overrideWithValue(
               const _FakePrayerRequestRepository(),
             ),
+            prayerSessionRepositoryProvider.overrideWithValue(
+              const _FakePrayerSessionRepository(),
+            ),
           ],
           child: const MaterialApp(home: HomeScreen()),
         ),
@@ -324,6 +413,9 @@ void main() {
           prayerRequestRepositoryProvider.overrideWithValue(
             const _FakePrayerRequestRepository(),
           ),
+          prayerSessionRepositoryProvider.overrideWithValue(
+            const _FakePrayerSessionRepository(),
+          ),
         ],
         child: const MaterialApp(home: HomeScreen()),
       ),
@@ -340,6 +432,468 @@ void main() {
 
     expect(find.text('Create a group'), findsOneWidget);
     expect(find.text('Request to join'), findsOneWidget);
+  });
+
+  testWidgets('Create Routine opens routine creation form', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          groupRepositoryProvider.overrideWithValue(
+            const _FakeGroupRepository(testGroups),
+          ),
+          authRepositoryProvider.overrideWithValue(const _FakeAuthRepository()),
+          prayerRequestRepositoryProvider.overrideWithValue(
+            const _FakePrayerRequestRepository(),
+          ),
+          prayerSessionRepositoryProvider.overrideWithValue(
+            const _FakePrayerSessionRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: HomeScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Create Routine'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Create a routine'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Routine name'), findsOneWidget);
+  });
+
+  testWidgets('Create Routine submits name and opens routine reader', (
+    tester,
+  ) async {
+    final createdNames = <String>[];
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          groupRepositoryProvider.overrideWithValue(
+            const _FakeGroupRepository(testGroups),
+          ),
+          authRepositoryProvider.overrideWithValue(const _FakeAuthRepository()),
+          prayerRequestRepositoryProvider.overrideWithValue(
+            const _FakePrayerRequestRepository(),
+          ),
+          prayerSessionRepositoryProvider.overrideWithValue(
+            _FakePrayerSessionRepository(createdNames: createdNames),
+          ),
+        ],
+        child: const MaterialApp(home: HomeScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Create Routine'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Routine name'),
+      'Midday Prayer',
+    );
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Create Routine'));
+    await tester.pumpAndSettle();
+
+    expect(createdNames, ['Midday Prayer']);
+    expect(find.text('Create a routine'), findsNothing);
+    expect(find.text('Midday Prayer'), findsOneWidget);
+    expect(find.text('Add a section to begin this routine.'), findsOneWidget);
+  });
+
+  testWidgets('Pray tab shows group load errors instead of empty feed', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          groupRepositoryProvider.overrideWithValue(
+            _FakeGroupRepository(
+              const [],
+              watchMyGroupsError: StateError('missing index'),
+            ),
+          ),
+          authRepositoryProvider.overrideWithValue(const _FakeAuthRepository()),
+          prayerRequestRepositoryProvider.overrideWithValue(
+            const _FakePrayerRequestRepository(),
+          ),
+          prayerSessionRepositoryProvider.overrideWithValue(
+            const _FakePrayerSessionRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: HomeScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('We could not load your groups.'), findsOneWidget);
+    expect(
+      find.text('Requests from your groups will appear here.'),
+      findsNothing,
+    );
+  });
+
+  testWidgets('Pray tab shows request load errors instead of empty requests', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          groupRepositoryProvider.overrideWithValue(
+            const _FakeGroupRepository(testGroups),
+          ),
+          authRepositoryProvider.overrideWithValue(const _FakeAuthRepository()),
+          prayerRequestRepositoryProvider.overrideWithValue(
+            _FakePrayerRequestRepository(
+              watchRequestsError: StateError('cannot decrypt'),
+            ),
+          ),
+          prayerSessionRepositoryProvider.overrideWithValue(
+            const _FakePrayerSessionRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: HomeScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('We could not load requests for Morning Group.'),
+      findsOneWidget,
+    );
+    expect(find.text('No requests yet.'), findsNothing);
+  });
+
+  testWidgets('routine row opens selected routine reader', (tester) async {
+    final session = PrayerSession(
+      id: 'session-1',
+      userId: 'user-1',
+      status: 'active',
+      sortOrder: 1000,
+      name: 'Morning Prayer',
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          groupRepositoryProvider.overrideWithValue(
+            const _FakeGroupRepository(testGroups),
+          ),
+          authRepositoryProvider.overrideWithValue(const _FakeAuthRepository()),
+          prayerRequestRepositoryProvider.overrideWithValue(
+            const _FakePrayerRequestRepository(),
+          ),
+          prayerSessionRepositoryProvider.overrideWithValue(
+            _FakePrayerSessionRepository(
+              sessions: [session],
+              sections: const [
+                RoutineSection(
+                  id: 'section-1',
+                  sessionId: 'session-1',
+                  userId: 'user-1',
+                  type: RoutineSectionType.customText,
+                  sortOrder: 1000,
+                  status: 'active',
+                  title: 'Opening',
+                  text: 'Lord, open our lips.',
+                ),
+              ],
+            ),
+          ),
+        ],
+        child: const MaterialApp(home: HomeScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Morning Prayer'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Opening'), findsOneWidget);
+    expect(find.text('Lord, open our lips.'), findsOneWidget);
+    expect(find.text('Step 1 of 1'), findsOneWidget);
+  });
+
+  testWidgets('request feed routine step preserves join in prayer action', (
+    tester,
+  ) async {
+    final session = PrayerSession(
+      id: 'session-1',
+      userId: 'user-1',
+      status: 'active',
+      sortOrder: 1000,
+      name: 'Morning Prayer',
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          groupRepositoryProvider.overrideWithValue(
+            const _FakeGroupRepository(testGroups),
+          ),
+          authRepositoryProvider.overrideWithValue(const _FakeAuthRepository()),
+          userProfileRepositoryProvider.overrideWithValue(
+            const _FakeUserProfileRepository({'user-2': 'Sarah Chen'}),
+          ),
+          prayerRequestRepositoryProvider.overrideWithValue(
+            _FakePrayerRequestRepository(
+              requests: [
+                PrayerRequestSummary(
+                  id: 'request-1',
+                  groupId: 'group-1',
+                  createdBy: 'user-2',
+                  status: 'active',
+                  createdAt: DateTime.utc(2026, 5, 18),
+                  title: 'Pray for wisdom',
+                  body: 'Private request body',
+                ),
+              ],
+            ),
+          ),
+          prayerSessionRepositoryProvider.overrideWithValue(
+            _FakePrayerSessionRepository(
+              sessions: [session],
+              sections: const [
+                RoutineSection(
+                  id: 'section-1',
+                  sessionId: 'session-1',
+                  userId: 'user-1',
+                  type: RoutineSectionType.requestFeed,
+                  sortOrder: 1000,
+                  status: 'active',
+                  title: 'Prayer requests',
+                  text: '',
+                ),
+              ],
+            ),
+          ),
+        ],
+        child: const MaterialApp(home: HomeScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Morning Prayer'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Prayer requests'), findsOneWidget);
+    expect(find.text('Pray for wisdom'), findsOneWidget);
+    expect(find.text('Join in prayer'), findsOneWidget);
+  });
+
+  testWidgets('routine editor exposes rename add and remove controls', (
+    tester,
+  ) async {
+    final removedSectionIds = <String>[];
+    final session = PrayerSession(
+      id: 'session-1',
+      userId: 'user-1',
+      status: 'active',
+      sortOrder: 1000,
+      name: 'Morning Prayer',
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          groupRepositoryProvider.overrideWithValue(
+            const _FakeGroupRepository(testGroups),
+          ),
+          authRepositoryProvider.overrideWithValue(const _FakeAuthRepository()),
+          prayerRequestRepositoryProvider.overrideWithValue(
+            const _FakePrayerRequestRepository(),
+          ),
+          prayerSessionRepositoryProvider.overrideWithValue(
+            _FakePrayerSessionRepository(
+              sessions: [session],
+              removedSectionIds: removedSectionIds,
+              sections: const [
+                RoutineSection(
+                  id: 'section-1',
+                  sessionId: 'session-1',
+                  userId: 'user-1',
+                  type: RoutineSectionType.customText,
+                  sortOrder: 1000,
+                  status: 'active',
+                  title: 'Opening',
+                  text: 'Lord, open our lips.',
+                ),
+              ],
+            ),
+          ),
+        ],
+        child: const MaterialApp(home: HomeScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Morning Prayer'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Edit routine'));
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(TextField, 'Routine name'), findsOneWidget);
+    expect(find.text('Save routine name'), findsOneWidget);
+    expect(find.text('Add custom text'), findsOneWidget);
+    expect(find.text('Add request feed'), findsOneWidget);
+    expect(find.byTooltip('Remove Opening'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Remove Opening'));
+    await tester.pumpAndSettle();
+
+    expect(removedSectionIds, ['section-1']);
+  });
+
+  testWidgets('routine editor updates reorders and archives sections', (
+    tester,
+  ) async {
+    final session = PrayerSession(
+      id: 'session-1',
+      userId: 'user-1',
+      status: 'active',
+      sortOrder: 1000,
+      name: 'Morning Prayer',
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+    );
+    final updatedSections = <RoutineSection>[];
+    final archivedSessionIds = <String>[];
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          groupRepositoryProvider.overrideWithValue(
+            const _FakeGroupRepository(testGroups),
+          ),
+          authRepositoryProvider.overrideWithValue(const _FakeAuthRepository()),
+          prayerRequestRepositoryProvider.overrideWithValue(
+            const _FakePrayerRequestRepository(),
+          ),
+          prayerSessionRepositoryProvider.overrideWithValue(
+            _FakePrayerSessionRepository(
+              sessions: [session],
+              updatedSections: updatedSections,
+              archivedSessionIds: archivedSessionIds,
+              sections: const [
+                RoutineSection(
+                  id: 'section-1',
+                  sessionId: 'session-1',
+                  userId: 'user-1',
+                  type: RoutineSectionType.customText,
+                  sortOrder: 1000,
+                  status: 'active',
+                  title: 'Opening',
+                  text: 'Lord, open our lips.',
+                ),
+                RoutineSection(
+                  id: 'section-2',
+                  sessionId: 'session-1',
+                  userId: 'user-1',
+                  type: RoutineSectionType.customText,
+                  sortOrder: 2000,
+                  status: 'active',
+                  title: 'Closing',
+                  text: 'Amen.',
+                ),
+              ],
+            ),
+          ),
+        ],
+        child: const MaterialApp(home: HomeScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Morning Prayer'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Edit routine'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Edit Opening'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Section title'),
+      'Opening prayer',
+    );
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Section text'),
+      'Be near to us.',
+    );
+    await tester.ensureVisible(find.text('Save section'));
+    await tester.tap(find.text('Save section'));
+    await tester.pumpAndSettle();
+
+    expect(updatedSections.single.title, 'Opening prayer');
+    expect(updatedSections.single.text, 'Be near to us.');
+
+    await tester.ensureVisible(find.byTooltip('Move Opening down'));
+    await tester.tap(find.byTooltip('Move Opening down'));
+    await tester.pumpAndSettle();
+
+    expect(updatedSections.length, 3);
+    expect(updatedSections[1].id, 'section-1');
+    expect(updatedSections[1].sortOrder, 2000);
+    expect(updatedSections[2].id, 'section-2');
+    expect(updatedSections[2].sortOrder, 1000);
+
+    await tester.ensureVisible(find.text('Archive routine'));
+    await tester.tap(find.text('Archive routine'));
+    await tester.pumpAndSettle();
+
+    expect(archivedSessionIds, ['session-1']);
+  });
+
+  testWidgets('routine editor adds all initial section types', (tester) async {
+    final session = PrayerSession(
+      id: 'session-1',
+      userId: 'user-1',
+      status: 'active',
+      sortOrder: 1000,
+      name: 'Morning Prayer',
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+    );
+    final addedTypes = <RoutineSectionType>[];
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          groupRepositoryProvider.overrideWithValue(
+            const _FakeGroupRepository(testGroups),
+          ),
+          authRepositoryProvider.overrideWithValue(const _FakeAuthRepository()),
+          prayerRequestRepositoryProvider.overrideWithValue(
+            const _FakePrayerRequestRepository(),
+          ),
+          prayerSessionRepositoryProvider.overrideWithValue(
+            _FakePrayerSessionRepository(
+              sessions: [session],
+              addedSectionTypes: addedTypes,
+            ),
+          ),
+        ],
+        child: const MaterialApp(home: HomeScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Morning Prayer'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Edit routine'));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Add heading'));
+    await tester.tap(find.text('Add heading'));
+    await tester.ensureVisible(find.text('Add silence'));
+    await tester.tap(find.text('Add silence'));
+    await tester.ensureVisible(find.text('Add reading placeholder'));
+    await tester.tap(find.text('Add reading placeholder'));
+    await tester.pumpAndSettle();
+
+    expect(addedTypes, [
+      RoutineSectionType.heading,
+      RoutineSectionType.silence,
+      RoutineSectionType.readingPlaceholder,
+    ]);
   });
 
   test('invite QR payload parser accepts raw and URI invite codes', () {

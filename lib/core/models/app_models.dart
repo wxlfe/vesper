@@ -228,3 +228,97 @@ class RequestReport {
     );
   }
 }
+
+enum RoutineSectionType {
+  customText,
+  requestFeed,
+  heading,
+  silence,
+  readingPlaceholder,
+}
+
+RoutineSectionType routineSectionTypeFromString(String value) {
+  return switch (value) {
+    'request_feed' => RoutineSectionType.requestFeed,
+    'heading' => RoutineSectionType.heading,
+    'silence' => RoutineSectionType.silence,
+    'reading_placeholder' => RoutineSectionType.readingPlaceholder,
+    _ => RoutineSectionType.customText,
+  };
+}
+
+String routineSectionTypeToString(RoutineSectionType value) {
+  return switch (value) {
+    RoutineSectionType.customText => 'custom_text',
+    RoutineSectionType.requestFeed => 'request_feed',
+    RoutineSectionType.heading => 'heading',
+    RoutineSectionType.silence => 'silence',
+    RoutineSectionType.readingPlaceholder => 'reading_placeholder',
+  };
+}
+
+class PrayerSession {
+  const PrayerSession({
+    required this.id,
+    required this.userId,
+    required this.status,
+    required this.sortOrder,
+    required this.name,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  final String id;
+  final String userId;
+  final String status;
+  final int sortOrder;
+  final String name;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+}
+
+class RoutineSection {
+  const RoutineSection({
+    required this.id,
+    required this.sessionId,
+    required this.userId,
+    required this.type,
+    required this.sortOrder,
+    required this.status,
+    required this.title,
+    required this.text,
+  });
+
+  final String id;
+  final String sessionId;
+  final String userId;
+  final RoutineSectionType type;
+  final int sortOrder;
+  final String status;
+  final String title;
+  final String text;
+}
+
+List<RoutineSection> sortedRoutineSections(Iterable<RoutineSection> sections) {
+  return [...sections]..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
+}
+
+Map<String, dynamic> privateRoutineDocumentMetadata({
+  required String userId,
+  required String status,
+  required int sortOrder,
+  required String ciphertext,
+  required String nonce,
+}) {
+  return {
+    'userId': userId,
+    'createdAt': null,
+    'updatedAt': null,
+    'status': status,
+    'sortOrder': sortOrder,
+    'payloadVersion': 1,
+    'algorithm': 'xchacha20-poly1305',
+    'ciphertext': ciphertext,
+    'nonce': nonce,
+  };
+}
