@@ -60,6 +60,7 @@ class PrayerRequestRepository {
     required VesperGroup group,
     required String title,
     required String body,
+    String? bodyDeltaJson,
   }) async {
     final doc = _firestore.collection('prayer_requests').doc();
     final groupKey = await _groupRepository.loadGroupKey(
@@ -73,9 +74,13 @@ class PrayerRequestRepository {
         documentId: doc.id,
         groupId: group.id,
         keyVersion: group.activeKeyVersion,
-        payloadVersion: 1,
+        payloadVersion: 2,
       ),
-      value: {'title': title.trim(), 'body': body.trim()},
+      value: requestContentPayload(
+        title: title,
+        body: body,
+        bodyDeltaJson: bodyDeltaJson ?? plainTextToRichTextDeltaJson(body),
+      ),
     );
     await doc.set({
       'groupId': group.id,
@@ -98,6 +103,7 @@ class PrayerRequestRepository {
     required PrayerRequestSummary request,
     required String title,
     required String body,
+    String? bodyDeltaJson,
   }) async {
     final groupKey = await _groupRepository.loadGroupKey(
       group.id,
@@ -110,9 +116,13 @@ class PrayerRequestRepository {
         documentId: request.id,
         groupId: group.id,
         keyVersion: group.activeKeyVersion,
-        payloadVersion: 1,
+        payloadVersion: 2,
       ),
-      value: {'title': title.trim(), 'body': body.trim()},
+      value: requestContentPayload(
+        title: title,
+        body: body,
+        bodyDeltaJson: bodyDeltaJson ?? plainTextToRichTextDeltaJson(body),
+      ),
     );
     await _firestore.collection('prayer_requests').doc(request.id).update({
       'updatedAt': FieldValue.serverTimestamp(),
@@ -259,6 +269,7 @@ class PrayerRequestRepository {
                 DateTime.fromMillisecondsSinceEpoch(0),
             title: decrypted['title'] as String? ?? 'Prayer request',
             body: decrypted['body'] as String? ?? '',
+            bodyDeltaJson: requestBodyDeltaJsonFromPayload(decrypted),
           ),
         );
       } on EncryptedPayloadException {

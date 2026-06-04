@@ -195,7 +195,7 @@ Stores encrypted request payloads plus non-sensitive routing metadata.
   "status": "active",
   "anonymous": false,
   "keyVersion": 3,
-  "payloadVersion": 1,
+  "payloadVersion": 2,
   "algorithm": "xchacha20-poly1305",
   "ciphertext": "base64",
   "nonce": "base64",
@@ -208,7 +208,18 @@ Stores encrypted request payloads plus non-sensitive routing metadata.
 }
 ```
 
-Encrypted payload contains title, body, private notes, sensitive tags, care details, and any content-derived summary.
+Encrypted payload contains title, body, request rich text body, private notes, sensitive tags, care details, and any content-derived summary. Request body rich text uses Quill Delta JSON as the canonical body format while retaining an encrypted plaintext `body` fallback for compatibility:
+
+```json
+{
+  "title": "Please pray",
+  "body": "Private request body",
+  "bodyFormat": "quill_delta_json",
+  "bodyDeltaJson": "[{\"insert\":\"Private request body\\n\"}]"
+}
+```
+
+`body`, `bodyFormat`, and `bodyDeltaJson` are sensitive plaintext before encryption and must never be stored in Firestore outside the encrypted payload.
 
 Allowed statuses:
 
@@ -220,7 +231,7 @@ Allowed statuses:
 
 The default group feed shows `active` requests only, ordered from newest to oldest. `answered`, `resolved`, and `archived` requests remain stored statuses but do not appear in the default group feed. Leaders may remove another member's request by transitioning it to `deleted` or archive it when appropriate.
 
-Request authors may manage their own requests after creation. Updating a request must re-encrypt the title and body on-device before writing replacement ciphertext. Removing a request should transition it to `deleted` rather than deleting the document directly. Authors may also mark their own requests as `answered`.
+Request authors may manage their own requests after creation. Updating a request must re-encrypt the title, plaintext body fallback, and rich text body on-device before writing replacement ciphertext. Removing a request should transition it to `deleted` rather than deleting the document directly. Authors may also mark their own requests as `answered`.
 
 ### Multi-Group Request Submission
 
@@ -348,15 +359,29 @@ Stores ordered encrypted routine sections for a user's private prayer sessions.
 }
 ```
 
-Allowed section types:
+Current section types:
 
 - `custom_text`
 - `request_feed`
+
+Legacy stored values that clients should continue to parse as user sections:
+
 - `heading`
 - `silence`
 - `reading_placeholder`
 
-Encrypted payload contains custom text, headings, labels, display options, request-feed slot configuration, and other user-authored routine content. A `request_feed` section stores placement and configuration only; it never stores request IDs or request content from a consolidated feed.
+Encrypted payload contains section title, section type, labels, display options, request-feed slot configuration, and other user-authored routine content. Custom section body content uses Quill Delta JSON as the canonical rich text format:
+
+```json
+{
+  "title": "Opening",
+  "type": "custom_text",
+  "contentFormat": "quill_delta_json",
+  "contentDeltaJson": "[{\"insert\":\"Lord, open our lips.\\n\"}]"
+}
+```
+
+`contentDeltaJson` is sensitive plaintext before encryption and must never be stored in Firestore outside the encrypted payload. A `request_feed` section stores placement and configuration only; it never stores request IDs or request content from a consolidated feed.
 
 ## `personal_prayers`
 
@@ -396,7 +421,7 @@ Stores metadata for routines intentionally shared by a user.
 }
 ```
 
-Encrypted payload contains shared routine title, description, and any shared metadata. The routine's custom text sections are intentionally shared with recipients, but still must not be readable by Firebase operators.
+Encrypted payload contains shared routine title, description, and any shared metadata. The routine's user-authored sections are intentionally shared with recipients, but still must not be readable by Firebase operators.
 
 Allowed statuses:
 
@@ -422,7 +447,7 @@ Stores ordered sections for a shared routine.
 }
 ```
 
-For custom text sections, the encrypted payload contains the shared text and placement. For request-feed sections, the encrypted payload contains placement and display configuration only. It must not include the sharer's request IDs, request contents, group IDs as feed contents, or content-derived summaries.
+For user-authored sections, the encrypted payload contains the shared text and placement. For request-feed sections, the encrypted payload contains placement and display configuration only. It must not include the sharer's request IDs, request contents, group IDs as feed contents, or content-derived summaries.
 
 ## `devices`
 

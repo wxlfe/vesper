@@ -156,7 +156,7 @@ Group approval settings are not part of the MVP. If a future phase reintroduces 
 
 ## Prayer Routines Offline
 
-Previously synced prayer sessions should be available offline, including custom text sections, personal prayers, and request-feed slots. Request-feed slots should use cached group requests that the user can decrypt locally.
+Previously synced prayer sessions should be available offline, including user-authored sections, personal prayers, and request-feed slots. Request-feed slots should use cached group requests that the user can decrypt locally.
 
 If the user has no cached requests for a request-feed slot, show calm empty copy. If a user loses access to a group, remove cached group keys and hide or remove future inaccessible requests from the routine feed.
 

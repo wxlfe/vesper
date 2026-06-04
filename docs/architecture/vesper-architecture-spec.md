@@ -149,10 +149,10 @@ Non-sensitive metadata may include group IDs, document IDs, timestamps, coarse s
 - Invitation: controlled invite-code flow for joining a group and receiving an encrypted group key after Leader approval.
 - Prayer session: user-defined scheduled prayer time, such as a morning routine, evening routine, or any custom prayer session.
 - Prayer routine: ordered structure inside a session.
-- Routine section: an ordered item in a routine, such as custom text, heading, silence, or a request-feed slot.
+- Routine section: an ordered item in a routine, such as a user-authored section or a request-feed slot.
 - Personal prayer: user-supplied encrypted prayer content private to the user unless intentionally shared as part of a routine.
 - Request-feed slot: a routine section that dynamically inserts the viewing user's current request feed.
-- Shared routine: a user-shared routine structure including custom text sections and request-feed slot placement, but not the sharer's actual request feed contents.
+- Shared routine: a user-shared routine structure including user-authored sections and request-feed slot placement, but not the sharer's actual request feed contents.
 
 ## Prayer Routines
 
@@ -163,11 +163,11 @@ Each prayer session may include:
 - User-defined name
 - Optional scheduled reminder time
 - Ordered routine sections
-- Custom text sections supplied by the user
-- A request-feed section placed wherever the user chooses
-- Future section types such as silence, reading placeholder, or checklist
+- User-authored sections
+- A request-feed section included by default and placed wherever the user chooses
+- Future section types such as checklist or other pastoral workflow aids
 
-Private prayer sessions and custom text sections are encrypted on-device for the owning user and synced across that user's trusted devices. If session names or routine section labels reveal sensitive spiritual habits, they should be encrypted with the rest of the routine content.
+Private prayer sessions and user-authored sections are encrypted on-device for the owning user and synced across that user's trusted devices. If session names or routine section labels reveal sensitive spiritual habits, they should be encrypted with the rest of the routine content.
 
 Scheduled reminders must use generic push notification content. Backend-triggered notifications must not include prayer text, request text, routine text, or content-derived summaries. If a client can generate local notifications from decrypted local data, it may display locally available session names according to platform constraints and user settings.
 
@@ -191,8 +191,7 @@ When a user shares a routine, they share all sections of that routine.
 
 Shared routine behavior:
 
-- Custom text sections are shared with their content and placement.
-- Heading, silence, and other structural sections are shared with their placement.
+- User-authored sections are shared with their content and placement.
 - Request-feed sections are shared only as dynamic slots.
 - The sharer's actual group requests, personal request feed, and request IDs are never copied into the shared routine.
 - The recipient's request-feed slot is populated from the recipient's own current request feed.

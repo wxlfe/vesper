@@ -29,7 +29,7 @@ void main() {
         sortOrder: 2000,
         status: 'active',
         title: 'Requests',
-        text: '',
+        contentDeltaJson: emptyRoutineDeltaJson(),
       ),
       RoutineSection(
         id: 'section-1',
@@ -39,7 +39,7 @@ void main() {
         sortOrder: 1000,
         status: 'active',
         title: 'Opening',
-        text: 'Lord, open our lips.',
+        contentDeltaJson: plainTextToRoutineDeltaJson('Lord, open our lips.'),
       ),
     ];
 
@@ -70,4 +70,50 @@ void main() {
       );
     },
   );
+
+  test('routine delta helpers create valid newline-terminated quill json', () {
+    expect(jsonDecode(emptyRoutineDeltaJson()), [
+      {'insert': '\n'},
+    ]);
+    expect(jsonDecode(plainTextToRoutineDeltaJson('Lord, open our lips.')), [
+      {'insert': 'Lord, open our lips.\n'},
+    ]);
+  });
+
+  test('legacy routine text converts to quill delta json', () {
+    final delta = routineSectionContentDeltaJsonFromPayload({
+      'text': '**Bold** *italic*',
+    });
+
+    expect(jsonDecode(delta), [
+      {'insert': '**Bold** *italic*\n'},
+    ]);
+  });
+
+  test(
+    'request body payload keeps encrypted plaintext fallback and rich text',
+    () {
+      final delta = plainTextToRichTextDeltaJson('Private request body');
+      final payload = requestContentPayload(
+        title: 'Please pray',
+        body: 'Private request body',
+        bodyDeltaJson: delta,
+      );
+
+      expect(payload['title'], 'Please pray');
+      expect(payload['body'], 'Private request body');
+      expect(payload['bodyFormat'], richTextContentFormatQuillDeltaJson);
+      expect(payload['bodyDeltaJson'], delta);
+    },
+  );
+
+  test('legacy request body converts to quill delta json', () {
+    final delta = requestBodyDeltaJsonFromPayload({
+      'body': 'Private request body',
+    });
+
+    expect(jsonDecode(delta), [
+      {'insert': 'Private request body\n'},
+    ]);
+  });
 }

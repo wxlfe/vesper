@@ -291,7 +291,7 @@ Submitting to multiple groups creates separate encrypted requests, one per selec
 
 ### Prayer Routine
 
-Prayer routines are ordered collections of user-arranged sections. They may include custom text, headings, silence, and a request-feed section. The request-feed section is dynamically populated with requests available to the viewing user.
+Prayer routines are ordered collections of user-arranged sections. They may include user-authored sections and a request-feed section. The request-feed section is included by default and dynamically populated with requests available to the viewing user.
 
 Selecting a routine opens a routine screen that guides the user step-by-step through the routine. The routine screen may use a TikTok-like full-screen vertical paging layout as a spatial pattern only: each step takes up the full screen and the user scrolls vertically through the routine order. It must not borrow TikTok's engagement mechanics.
 

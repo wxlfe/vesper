@@ -8,8 +8,8 @@ Users need a private way to organize prayer around their own rhythms, user-suppl
 
 - Let users create any number of scheduled prayer sessions.
 - Let users name sessions and arrange routine sections however they choose.
-- Support user-supplied custom text sections.
-- Support a request-feed section that dynamically inserts the viewing user's current group requests.
+- Support user-supplied sections.
+- Include a request-feed section by default that dynamically inserts the viewing user's current group requests.
 - Let users choose optional generic push reminders for prayer sessions.
 - Sync routine structure across the user's trusted devices.
 - Encrypt private routine content and personal prayers on-device.
@@ -32,7 +32,7 @@ Users need a private way to organize prayer around their own rhythms, user-suppl
 - As a user, I can create a prayer session named in my own words.
 - As a user, I can schedule a prayer session for a time I choose.
 - As a user, I can enable or disable a generic reminder for each session.
-- As a user, I can add custom text sections to a routine.
+- As a user, I can add simple sections to a routine.
 - As a user, I can place my request feed anywhere in the routine.
 - As a user, I can reorder routine sections.
 - As a user, I can build one simple daily prayer session or many scheduled sessions.
@@ -72,15 +72,14 @@ A prayer time is scheduled
 
 ## Routine Sections
 
-Initial section types:
+Current section types:
 
 - `custom_text`
 - `request_feed`
-- `heading`
-- `silence`
-- `reading_placeholder`
 
 A `request_feed` section stores placement and display configuration only. It does not store request IDs or copied request contents. When rendered, it resolves to the viewing user's current request organizer.
+
+New routines include one `request_feed` section by default. If a user removes that request-feed section, the routine editor offers both `Section` and `Request feed`; otherwise, the add-section action creates another `Section` directly.
 
 ## Routine Sharing
 
@@ -88,8 +87,7 @@ When a user shares a routine, they share all sections of that routine.
 
 Sharing behavior:
 
-- Custom text sections share their content and placement.
-- Heading, silence, and placeholder sections share their content/configuration and placement.
+- Sections share their content and placement.
 - Request-feed sections share placement and configuration only.
 - The sharer's actual request feed, group request IDs, group request content, and group-derived summaries are never shared.
 - Recipients populate request-feed sections with their own current request feed.
@@ -107,6 +105,8 @@ Use the canonical collections in [Firestore Schema](../../architecture/firestore
 - `shared_routine_sections` for encrypted shared section content and placement.
 
 Routine section ordering should use stable sort keys so offline edits can preserve all sections where possible.
+
+Custom routine section body content uses Quill Delta JSON as the canonical rich text format. The decrypted routine section payload stores `contentFormat: "quill_delta_json"` and `contentDeltaJson`; this rich text JSON is sensitive plaintext before encryption and must only be persisted inside encrypted payloads. Legacy plaintext routine section content may be converted into plain Quill Delta JSON on read.
 
 ## Security And Privacy
 
@@ -129,7 +129,8 @@ Routine edits and personal prayer edits may queue offline as encrypted pending w
 - Routines appear above the request feed in a horizontal circular-icon row.
 - `Create Routine` remains visible regardless of routine count.
 - Users can add, edit, remove, and reorder routine sections.
-- Users can add a request-feed section to a routine.
+- New routines include a request-feed section by default.
+- Users can add a request-feed section back to a routine after removing it.
 - The request-feed section renders the viewing user's current eligible requests.
 - The `Pray` tab shows a consolidated request feed below routines.
 - Selecting a routine opens a full-screen step-by-step routine reader.

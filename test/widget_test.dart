@@ -3,14 +3,17 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:vesper/app.dart';
 import 'package:vesper/core/models/app_models.dart';
 import 'package:vesper/core/services/app_providers.dart';
+import 'package:vesper/core/theme/app_theme.dart';
 import 'package:vesper/features/auth/data/auth_repository.dart';
 import 'package:vesper/features/groups/data/group_repository.dart';
 import 'package:vesper/features/prayer/data/prayer_session_repository.dart';
 import 'package:vesper/features/requests/data/prayer_request_repository.dart';
 import 'package:vesper/features/profile/data/user_profile_repository.dart';
+import 'package:vesper/shared/rich_text/rich_text_widgets.dart';
 
 class _FakeUserProfileRepository implements UserProfileRepository {
   const _FakeUserProfileRepository(this.names);
@@ -173,6 +176,7 @@ class _FakePrayerRequestRepository implements PrayerRequestRepository {
     required VesperGroup group,
     required String title,
     required String body,
+    String? bodyDeltaJson,
   }) async {}
 
   @override
@@ -181,6 +185,7 @@ class _FakePrayerRequestRepository implements PrayerRequestRepository {
     required PrayerRequestSummary request,
     required String title,
     required String body,
+    String? bodyDeltaJson,
   }) async {}
 
   @override
@@ -221,6 +226,7 @@ class _FakePrayerSessionRepository implements PrayerSessionRepository {
     this.sessions = const [],
     this.sections = const [],
     this.createdNames,
+    this.createError,
     this.updatedSections,
     this.removedSectionIds,
     this.archivedSessionIds,
@@ -230,6 +236,7 @@ class _FakePrayerSessionRepository implements PrayerSessionRepository {
   final List<PrayerSession> sessions;
   final List<RoutineSection> sections;
   final List<String>? createdNames;
+  final Object? createError;
   final List<RoutineSection>? updatedSections;
   final List<String>? removedSectionIds;
   final List<String>? archivedSessionIds;
@@ -245,6 +252,8 @@ class _FakePrayerSessionRepository implements PrayerSessionRepository {
 
   @override
   Future<PrayerSession> createSession(String name) async {
+    final error = createError;
+    if (error != null) throw error;
     createdNames?.add(name.trim());
     return PrayerSession(
       id: 'created-session',
@@ -270,7 +279,7 @@ class _FakePrayerSessionRepository implements PrayerSessionRepository {
     required String sessionId,
     required RoutineSectionType type,
     required String title,
-    required String text,
+    required String contentDeltaJson,
   }) async {
     addedSectionTypes?.add(type);
   }
@@ -388,10 +397,27 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Share a Prayer Request'), findsOneWidget);
+      expect(find.widgetWithText(TextField, 'Title'), findsOneWidget);
+      expect(find.text('Request'), findsOneWidget);
+      expect(find.byType(RichTextContentEditor), findsOneWidget);
+      expect(find.text('Continue'), findsOneWidget);
+      expect(find.text('Request Prayer'), findsNothing);
+      expect(find.text('Choose groups'), findsNothing);
+      expect(find.text('Select All'), findsNothing);
+      expect(find.text('Morning Group'), findsNothing);
+      expect(find.text('Evening Group'), findsNothing);
+      expect(find.text('0 groups selected'), findsNothing);
+
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Choose groups'), findsOneWidget);
       expect(find.text('Select All'), findsOneWidget);
       expect(find.text('Morning Group'), findsOneWidget);
       expect(find.text('Evening Group'), findsOneWidget);
       expect(find.text('0 groups selected'), findsOneWidget);
+      expect(find.text('Back'), findsOneWidget);
+      expect(find.text('Request Prayer'), findsOneWidget);
 
       await tester.tap(find.text('Select All'));
       await tester.pumpAndSettle();
@@ -399,6 +425,50 @@ void main() {
       expect(find.text('2 groups selected'), findsOneWidget);
     },
   );
+
+  testWidgets('multi-group composer back preserves selected groups', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          groupRepositoryProvider.overrideWithValue(
+            const _FakeGroupRepository(testGroups),
+          ),
+          authRepositoryProvider.overrideWithValue(const _FakeAuthRepository()),
+          prayerRequestRepositoryProvider.overrideWithValue(
+            const _FakePrayerRequestRepository(),
+          ),
+          prayerSessionRepositoryProvider.overrideWithValue(
+            const _FakePrayerSessionRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: HomeScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Submit prayer request'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Morning Group'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 group selected'), findsOneWidget);
+
+    await tester.tap(find.text('Back'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Share a Prayer Request'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Title'), findsOneWidget);
+    expect(find.text('Choose groups'), findsNothing);
+
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 group selected'), findsOneWidget);
+  });
 
   testWidgets('Groups tab owns group creation and join entry point', (
     tester,
@@ -465,6 +535,7 @@ void main() {
     tester,
   ) async {
     final createdNames = <String>[];
+    final addedTypes = <RoutineSectionType>[];
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -476,7 +547,10 @@ void main() {
             const _FakePrayerRequestRepository(),
           ),
           prayerSessionRepositoryProvider.overrideWithValue(
-            _FakePrayerSessionRepository(createdNames: createdNames),
+            _FakePrayerSessionRepository(
+              createdNames: createdNames,
+              addedSectionTypes: addedTypes,
+            ),
           ),
         ],
         child: const MaterialApp(home: HomeScreen()),
@@ -494,9 +568,108 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(createdNames, ['Midday Prayer']);
+    expect(addedTypes, [RoutineSectionType.requestFeed]);
     expect(find.text('Create a routine'), findsNothing);
     expect(find.text('Midday Prayer'), findsOneWidget);
     expect(find.text('Add a section to begin this routine.'), findsOneWidget);
+  });
+
+  testWidgets('Create Routine shows inline error when name is blank', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          groupRepositoryProvider.overrideWithValue(
+            const _FakeGroupRepository(testGroups),
+          ),
+          authRepositoryProvider.overrideWithValue(const _FakeAuthRepository()),
+          prayerRequestRepositoryProvider.overrideWithValue(
+            const _FakePrayerRequestRepository(),
+          ),
+          prayerSessionRepositoryProvider.overrideWithValue(
+            const _FakePrayerSessionRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: HomeScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Create Routine'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Create Routine'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.text('Name this routine first.'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Create a routine'), findsOneWidget);
+  });
+
+  testWidgets('Create Routine shows inline error when save fails', (
+    tester,
+  ) async {
+    final messages = <String>[];
+    final previousDebugPrint = debugPrint;
+    debugPrint = (message, {wrapWidth}) {
+      if (message != null) messages.add(message);
+    };
+    addTearDown(() => debugPrint = previousDebugPrint);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          groupRepositoryProvider.overrideWithValue(
+            const _FakeGroupRepository(testGroups),
+          ),
+          authRepositoryProvider.overrideWithValue(const _FakeAuthRepository()),
+          prayerRequestRepositoryProvider.overrideWithValue(
+            const _FakePrayerRequestRepository(),
+          ),
+          prayerSessionRepositoryProvider.overrideWithValue(
+            _FakePrayerSessionRepository(
+              createError: FirebaseException(
+                plugin: 'cloud_firestore',
+                code: 'permission-denied',
+                message: 'Missing or insufficient permissions.',
+              ),
+            ),
+          ),
+        ],
+        child: const MaterialApp(home: HomeScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Create Routine'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Routine name'),
+      'Midday Prayer',
+    );
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Create Routine'));
+    await tester.pumpAndSettle();
+    debugPrint = previousDebugPrint;
+
+    expect(
+      find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.text('This routine could not be created.'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Create a routine'), findsOneWidget);
+    expect(
+      messages,
+      contains(
+        'Routine creation error: FirebaseException code=permission-denied message=Missing or insufficient permissions.',
+      ),
+    );
   });
 
   testWidgets('Pray tab shows group load errors instead of empty feed', (
@@ -594,7 +767,7 @@ void main() {
                   sortOrder: 1000,
                   status: 'active',
                   title: 'Opening',
-                  text: 'Lord, open our lips.',
+                  contentDeltaJson: '[{"insert":"Lord, open our lips.\\n"}]',
                 ),
               ],
             ),
@@ -609,7 +782,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Opening'), findsOneWidget);
-    expect(find.text('Lord, open our lips.'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is RichText &&
+            widget.text.toPlainText().contains('Lord, open our lips.'),
+      ),
+      findsOneWidget,
+    );
     expect(find.text('Step 1 of 1'), findsOneWidget);
   });
 
@@ -662,7 +842,7 @@ void main() {
                   sortOrder: 1000,
                   status: 'active',
                   title: 'Prayer requests',
-                  text: '',
+                  contentDeltaJson: '[{"insert":"\\n"}]',
                 ),
               ],
             ),
@@ -681,7 +861,147 @@ void main() {
     expect(find.text('Join in prayer'), findsOneWidget);
   });
 
-  testWidgets('routine editor exposes rename add and remove controls', (
+  testWidgets('routine section content renders quill delta in a card', (
+    tester,
+  ) async {
+    final session = PrayerSession(
+      id: 'session-1',
+      userId: 'user-1',
+      status: 'active',
+      sortOrder: 1000,
+      name: 'Morning Prayer',
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          groupRepositoryProvider.overrideWithValue(
+            const _FakeGroupRepository(testGroups),
+          ),
+          authRepositoryProvider.overrideWithValue(const _FakeAuthRepository()),
+          prayerRequestRepositoryProvider.overrideWithValue(
+            const _FakePrayerRequestRepository(),
+          ),
+          prayerSessionRepositoryProvider.overrideWithValue(
+            _FakePrayerSessionRepository(
+              sessions: [session],
+              sections: const [
+                RoutineSection(
+                  id: 'section-1',
+                  sessionId: 'session-1',
+                  userId: 'user-1',
+                  type: RoutineSectionType.customText,
+                  sortOrder: 1000,
+                  status: 'active',
+                  title: 'Opening',
+                  contentDeltaJson:
+                      '[{"insert":"Bold","attributes":{"bold":true}},{"insert":" italic","attributes":{"italic":true}},{"insert":" struck","attributes":{"strike":true}},{"insert":"\\n"}]',
+                ),
+              ],
+            ),
+          ),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.light,
+          home: RoutineReaderScreen(session: session),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Opening'), findsOneWidget);
+    expect(find.byType(RoutineSectionContentCard), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(RoutineSectionContentCard),
+        matching: find.text('Opening'),
+      ),
+      findsNothing,
+    );
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is RichText &&
+            widget.text.toPlainText().contains('Bold italic struck'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  test('routine format buttons return unset attributes when active', () {
+    final controller = routineQuillControllerFromDeltaJson(
+      plainTextToRoutineDeltaJson('Amen'),
+    );
+
+    controller.updateSelection(
+      const TextSelection(baseOffset: 0, extentOffset: 4),
+      quill.ChangeSource.local,
+    );
+
+    final firstToggle = routineFormatAttributeForToggle(
+      controller,
+      quill.Attribute.bold,
+    );
+    controller.formatSelection(firstToggle);
+
+    final secondToggle = routineFormatAttributeForToggle(
+      controller,
+      quill.Attribute.bold,
+    );
+
+    expect(firstToggle, quill.Attribute.bold);
+    expect(secondToggle.key, quill.Attribute.bold.key);
+    expect(secondToggle.value, isNull);
+  });
+
+  testWidgets('rich text toolbar marks active formats as selected', (
+    tester,
+  ) async {
+    final controller = richTextControllerFromDeltaJson(
+      '[{"insert":"Bold","attributes":{"bold":true}},{"insert":" plain\\n"}]',
+    );
+    final focusNode = FocusNode();
+    addTearDown(controller.dispose);
+    addTearDown(focusNode.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: Scaffold(
+          body: RichTextFormatToolbar(
+            controller: controller,
+            focusNode: focusNode,
+          ),
+        ),
+      ),
+    );
+
+    controller.updateSelection(
+      const TextSelection.collapsed(offset: 1),
+      quill.ChangeSource.local,
+    );
+    await tester.pump();
+
+    final boldButton = tester.widget<IconButton>(
+      find.widgetWithIcon(IconButton, Icons.format_bold),
+    );
+    final italicButton = tester.widget<IconButton>(
+      find.widgetWithIcon(IconButton, Icons.format_italic),
+    );
+
+    expect(boldButton.isSelected, isTrue);
+    expect(italicButton.isSelected, isFalse);
+  });
+
+  test('legacy heading routine sections read as prayer sections', () {
+    expect(
+      routineSectionTypeFromString('heading'),
+      RoutineSectionType.customText,
+    );
+  });
+
+  testWidgets('routine editor opens section edit screen from section rows', (
     tester,
   ) async {
     final removedSectionIds = <String>[];
@@ -717,7 +1037,7 @@ void main() {
                   sortOrder: 1000,
                   status: 'active',
                   title: 'Opening',
-                  text: 'Lord, open our lips.',
+                  contentDeltaJson: '[{"insert":"Lord, open our lips.\\n"}]',
                 ),
               ],
             ),
@@ -733,19 +1053,111 @@ void main() {
     await tester.tap(find.byTooltip('Edit routine'));
     await tester.pumpAndSettle();
 
+    expect(find.byType(RoutineEditScreen), findsOneWidget);
     expect(find.widgetWithText(TextField, 'Routine name'), findsOneWidget);
     expect(find.text('Save routine name'), findsOneWidget);
-    expect(find.text('Add custom text'), findsOneWidget);
-    expect(find.text('Add request feed'), findsOneWidget);
+    expect(find.byTooltip('Add section'), findsOneWidget);
+    expect(find.text('Section'), findsOneWidget);
+    expect(find.text('custom_text'), findsNothing);
+    expect(find.widgetWithText(TextField, 'Section title'), findsNothing);
+    expect(find.byTooltip('Edit Opening'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Edit Opening'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Edit section'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Section title'), findsOneWidget);
     expect(find.byTooltip('Remove Opening'), findsOneWidget);
 
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(RoutineEditScreen), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Section title'), findsNothing);
+
+    await tester.tap(find.byTooltip('Edit Opening'));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('Remove Opening'));
     await tester.pumpAndSettle();
 
     expect(removedSectionIds, ['section-1']);
+    expect(find.byType(RoutineEditScreen), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(RoutineEditScreen), findsNothing);
+    expect(find.byType(RoutineReaderScreen), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is RichText &&
+            widget.text.toPlainText().contains('Lord, open our lips.'),
+      ),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('routine editor updates reorders and archives sections', (
+  testWidgets('routine section edit screen actions work with app theme', (
+    tester,
+  ) async {
+    final session = PrayerSession(
+      id: 'session-1',
+      userId: 'user-1',
+      status: 'active',
+      sortOrder: 1000,
+      name: 'Morning Prayer',
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          groupRepositoryProvider.overrideWithValue(
+            const _FakeGroupRepository(testGroups),
+          ),
+          authRepositoryProvider.overrideWithValue(const _FakeAuthRepository()),
+          prayerRequestRepositoryProvider.overrideWithValue(
+            const _FakePrayerRequestRepository(),
+          ),
+          prayerSessionRepositoryProvider.overrideWithValue(
+            _FakePrayerSessionRepository(
+              sessions: [session],
+              sections: const [
+                RoutineSection(
+                  id: 'section-1',
+                  sessionId: 'session-1',
+                  userId: 'user-1',
+                  type: RoutineSectionType.customText,
+                  sortOrder: 1000,
+                  status: 'active',
+                  title: 'Opening',
+                  contentDeltaJson: '[{"insert":"Lord, open our lips.\\n"}]',
+                ),
+              ],
+            ),
+          ),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.light,
+          home: RoutineReaderScreen(session: session),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Edit routine'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Edit Opening'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Edit section'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Section title'), findsOneWidget);
+    expect(find.text('Save section'), findsOneWidget);
+    expect(find.text('Remove'), findsOneWidget);
+  });
+
+  testWidgets('routine editor updates drag reorders and archives sections', (
     tester,
   ) async {
     final session = PrayerSession(
@@ -783,7 +1195,7 @@ void main() {
                   sortOrder: 1000,
                   status: 'active',
                   title: 'Opening',
-                  text: 'Lord, open our lips.',
+                  contentDeltaJson: '[{"insert":"Lord, open our lips.\\n"}]',
                 ),
                 RoutineSection(
                   id: 'section-2',
@@ -793,7 +1205,7 @@ void main() {
                   sortOrder: 2000,
                   status: 'active',
                   title: 'Closing',
-                  text: 'Amen.',
+                  contentDeltaJson: '[{"insert":"Amen.\\n"}]',
                 ),
               ],
             ),
@@ -815,26 +1227,41 @@ void main() {
       find.widgetWithText(TextField, 'Section title'),
       'Opening prayer',
     );
-    await tester.enterText(
-      find.widgetWithText(TextField, 'Section text'),
-      'Be near to us.',
+    expect(find.widgetWithText(TextField, 'Section text'), findsNothing);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is RichText &&
+            widget.text.toPlainText().contains('Lord, open our lips.'),
+      ),
+      findsOneWidget,
     );
     await tester.ensureVisible(find.text('Save section'));
     await tester.tap(find.text('Save section'));
     await tester.pumpAndSettle();
 
     expect(updatedSections.single.title, 'Opening prayer');
-    expect(updatedSections.single.text, 'Be near to us.');
+    expect(
+      updatedSections.single.contentDeltaJson,
+      '[{"insert":"Lord, open our lips.\\n"}]',
+    );
+    expect(find.byType(RoutineEditScreen), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Section title'), findsNothing);
 
-    await tester.ensureVisible(find.byTooltip('Move Opening down'));
-    await tester.tap(find.byTooltip('Move Opening down'));
+    final openingDragHandle = find.byIcon(Icons.drag_handle).first;
+    await tester.ensureVisible(openingDragHandle);
+    await tester.timedDrag(
+      openingDragHandle,
+      const Offset(0, 320),
+      const Duration(milliseconds: 500),
+    );
     await tester.pumpAndSettle();
 
     expect(updatedSections.length, 3);
-    expect(updatedSections[1].id, 'section-1');
-    expect(updatedSections[1].sortOrder, 2000);
-    expect(updatedSections[2].id, 'section-2');
-    expect(updatedSections[2].sortOrder, 1000);
+    expect(updatedSections[1].id, 'section-2');
+    expect(updatedSections[1].sortOrder, 1000);
+    expect(updatedSections[2].id, 'section-1');
+    expect(updatedSections[2].sortOrder, 2000);
 
     await tester.ensureVisible(find.text('Archive routine'));
     await tester.tap(find.text('Archive routine'));
@@ -843,7 +1270,9 @@ void main() {
     expect(archivedSessionIds, ['session-1']);
   });
 
-  testWidgets('routine editor adds all initial section types', (tester) async {
+  testWidgets('routine editor add sheet offers section and request feed only', (
+    tester,
+  ) async {
     final session = PrayerSession(
       id: 'session-1',
       userId: 'user-1',
@@ -881,19 +1310,80 @@ void main() {
     await tester.tap(find.byTooltip('Edit routine'));
     await tester.pumpAndSettle();
 
-    await tester.ensureVisible(find.text('Add heading'));
-    await tester.tap(find.text('Add heading'));
-    await tester.ensureVisible(find.text('Add silence'));
-    await tester.tap(find.text('Add silence'));
-    await tester.ensureVisible(find.text('Add reading placeholder'));
-    await tester.tap(find.text('Add reading placeholder'));
+    await tester.tap(find.byTooltip('Add section'));
+    await tester.pumpAndSettle();
+    expect(find.text('Section'), findsOneWidget);
+    expect(find.text('Heading'), findsNothing);
+    expect(find.text('Prayer'), findsNothing);
+    expect(find.text('Silence'), findsNothing);
+    expect(find.text('Reading'), findsNothing);
+    expect(find.text('Request feed'), findsOneWidget);
+
+    await tester.tap(find.text('Section'));
     await tester.pumpAndSettle();
 
-    expect(addedTypes, [
-      RoutineSectionType.heading,
-      RoutineSectionType.silence,
-      RoutineSectionType.readingPlaceholder,
-    ]);
+    expect(addedTypes, [RoutineSectionType.customText]);
+  });
+
+  testWidgets('routine editor add FAB directly adds section when feed exists', (
+    tester,
+  ) async {
+    final session = PrayerSession(
+      id: 'session-1',
+      userId: 'user-1',
+      status: 'active',
+      sortOrder: 1000,
+      name: 'Morning Prayer',
+      createdAt: DateTime.utc(2026),
+      updatedAt: DateTime.utc(2026),
+    );
+    final addedTypes = <RoutineSectionType>[];
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          groupRepositoryProvider.overrideWithValue(
+            const _FakeGroupRepository(testGroups),
+          ),
+          authRepositoryProvider.overrideWithValue(const _FakeAuthRepository()),
+          prayerRequestRepositoryProvider.overrideWithValue(
+            const _FakePrayerRequestRepository(),
+          ),
+          prayerSessionRepositoryProvider.overrideWithValue(
+            _FakePrayerSessionRepository(
+              sessions: [session],
+              addedSectionTypes: addedTypes,
+              sections: const [
+                RoutineSection(
+                  id: 'section-1',
+                  sessionId: 'session-1',
+                  userId: 'user-1',
+                  type: RoutineSectionType.requestFeed,
+                  sortOrder: 1000,
+                  status: 'active',
+                  title: 'Prayer requests',
+                  contentDeltaJson: '[{"insert":"\\n"}]',
+                ),
+              ],
+            ),
+          ),
+        ],
+        child: const MaterialApp(home: HomeScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Morning Prayer'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Edit routine'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Add section'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('add-section-request_feed')),
+      findsNothing,
+    );
+    expect(addedTypes, [RoutineSectionType.customText]);
   });
 
   test('invite QR payload parser accepts raw and URI invite codes', () {
@@ -930,7 +1420,7 @@ void main() {
     expect(find.textContaining('Vesper cannot read'), findsOneWidget);
   });
 
-  testWidgets('prayer composer uses a larger request body field', (
+  testWidgets('prayer composer uses rich text request body editor', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -951,13 +1441,12 @@ void main() {
       ),
     );
 
-    final requestField = tester.widget<TextField>(
-      find.widgetWithText(TextField, 'Request'),
-    );
-
-    expect(requestField.minLines, 5);
-    expect(requestField.maxLines, 8);
-    expect(requestField.keyboardType, TextInputType.multiline);
+    expect(find.text('Request'), findsOneWidget);
+    expect(find.byType(RichTextContentEditor), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Request'), findsNothing);
+    expect(find.text('Request Prayer'), findsOneWidget);
+    expect(find.text('Continue'), findsNothing);
+    expect(find.text('Select All'), findsNothing);
   });
 
   testWidgets('prayer composer closes after successful submit', (tester) async {
@@ -978,9 +1467,14 @@ void main() {
                     createdBy: 'leader-1',
                     activeKeyVersion: 1,
                   ),
-                  onCreateRequest: ({required title, required body}) async {
-                    submitted = true;
-                  },
+                  onCreateRequest:
+                      ({
+                        required title,
+                        required body,
+                        required bodyDeltaJson,
+                      }) async {
+                        submitted = true;
+                      },
                 ),
               ),
               child: const Text('Open composer'),
@@ -993,7 +1487,6 @@ void main() {
     await tester.tap(find.text('Open composer'));
     await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextField, 'Title'), 'Title');
-    await tester.enterText(find.widgetWithText(TextField, 'Request'), 'Body');
     await tester.tap(find.text('Request Prayer'));
     await tester.pumpAndSettle();
 
@@ -1086,6 +1579,55 @@ void main() {
 
     expect(find.textContaining('Sarah Chen'), findsOneWidget);
     expect(find.textContaining('user-1'), findsNothing);
+  });
+
+  testWidgets('request card renders rich text request body', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          userProfileRepositoryProvider.overrideWithValue(
+            const _FakeUserProfileRepository({'user-1': 'Sarah Chen'}),
+          ),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: RequestCard(
+              group: const VesperGroup(
+                id: 'group-1',
+                name: 'Group',
+                description: '',
+                createdBy: 'leader-1',
+                activeKeyVersion: 1,
+              ),
+              request: PrayerRequestSummary(
+                id: 'request-1',
+                groupId: 'group-1',
+                createdBy: 'user-1',
+                status: 'active',
+                createdAt: DateTime.utc(2026, 5, 18),
+                title: 'Please pray',
+                body: 'Private request body',
+                bodyDeltaJson:
+                    '[{"insert":"Private","attributes":{"bold":true}},{"insert":" request body\\n"}]',
+              ),
+              isLeader: false,
+              currentUserId: 'someone-else',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(RichTextContentViewer), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is RichText &&
+            widget.text.toPlainText().contains('Private request body'),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('request actions are hidden behind top right details menu', (
@@ -1414,7 +1956,15 @@ void main() {
     final metadataTop = tester
         .getTopLeft(find.textContaining('Sarah Chen · active'))
         .dy;
-    final bodyTop = tester.getTopLeft(find.text('Private request body')).dy;
+    final bodyTop = tester
+        .getTopLeft(
+          find.byWidgetPredicate(
+            (widget) =>
+                widget is RichText &&
+                widget.text.toPlainText().contains('Private request body'),
+          ),
+        )
+        .dy;
     expect(titleTop, lessThan(metadataTop));
     expect(metadataTop, lessThan(bodyTop));
     expect(find.textContaining('joining in prayer'), findsNothing);

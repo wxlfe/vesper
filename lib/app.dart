@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_quill/flutter_quill.dart' as quill;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
@@ -10,6 +11,7 @@ import 'package:vesper/core/services/app_providers.dart';
 import 'package:vesper/core/theme/app_theme.dart';
 import 'package:vesper/features/groups/data/group_repository.dart';
 import 'package:vesper/features/profile/data/user_profile_repository.dart';
+import 'package:vesper/shared/rich_text/rich_text_widgets.dart';
 
 class VesperApp extends ConsumerWidget {
   const VesperApp({super.key});
@@ -355,6 +357,7 @@ class CreateRoutineSheet extends ConsumerStatefulWidget {
 class _CreateRoutineSheetState extends ConsumerState<CreateRoutineSheet> {
   final _name = TextEditingController();
   bool _busy = false;
+  String? _errorText;
 
   @override
   void dispose() {
@@ -382,8 +385,23 @@ class _CreateRoutineSheetState extends ConsumerState<CreateRoutineSheet> {
           TextField(
             controller: _name,
             decoration: const InputDecoration(labelText: 'Routine name'),
+            onChanged: (_) {
+              if (_errorText != null) setState(() => _errorText = null);
+            },
             textInputAction: TextInputAction.done,
           ),
+          if (_errorText != null) ...[
+            const SizedBox(height: 8),
+            Semantics(
+              liveRegion: true,
+              child: Text(
+                _errorText!,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.error,
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           ElevatedButton(
             onPressed: _busy ? null : _create,
@@ -396,14 +414,25 @@ class _CreateRoutineSheetState extends ConsumerState<CreateRoutineSheet> {
 
   Future<void> _create() async {
     if (_name.text.trim().isEmpty) {
-      _showMessage(context, 'Name this routine first.');
+      setState(() => _errorText = 'Name this routine first.');
       return;
     }
-    setState(() => _busy = true);
+    setState(() {
+      _busy = true;
+      _errorText = null;
+    });
     try {
       final session = await ref
           .read(prayerSessionRepositoryProvider)
           .createSession(_name.text);
+      await ref
+          .read(prayerSessionRepositoryProvider)
+          .addSection(
+            sessionId: session.id,
+            type: RoutineSectionType.requestFeed,
+            title: 'Prayer requests',
+            contentDeltaJson: emptyRoutineDeltaJson(),
+          );
       if (mounted) {
         final navigator = Navigator.of(context);
         navigator.pop();
@@ -413,12 +442,27 @@ class _CreateRoutineSheetState extends ConsumerState<CreateRoutineSheet> {
           ),
         );
       }
-    } on Exception {
-      if (mounted) _showMessage(context, 'This routine could not be created.');
+    } catch (error, stackTrace) {
+      logRoutineCreationError(error, stackTrace);
+      if (mounted) {
+        setState(() => _errorText = 'This routine could not be created.');
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
+}
+
+void logRoutineCreationError(Object error, StackTrace stackTrace) {
+  if (error is FirebaseException) {
+    debugPrint(
+      'Routine creation error: FirebaseException code=${error.code} message=${error.message}',
+    );
+    debugPrint('Routine creation stack: $stackTrace');
+    return;
+  }
+  debugPrint('Routine creation error: ${error.runtimeType}');
+  debugPrint('Routine creation stack: $stackTrace');
 }
 
 class RoutineReaderScreen extends ConsumerWidget {
@@ -433,10 +477,10 @@ class RoutineReaderScreen extends ConsumerWidget {
         title: Text(session.name),
         actions: [
           IconButton(
-            onPressed: () => showModalBottomSheet<void>(
-              context: context,
-              isScrollControlled: true,
-              builder: (_) => RoutineEditSheet(session: session),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => RoutineEditScreen(session: session),
+              ),
             ),
             icon: const Icon(Icons.edit_outlined),
             tooltip: 'Edit routine',
@@ -533,27 +577,57 @@ class RoutineSectionBody extends ConsumerWidget {
         },
       );
     }
-    if (section.type == RoutineSectionType.silence) {
-      return Text(section.text.isEmpty ? 'Keep silence.' : section.text);
-    }
-    return Text(section.text);
+    return RoutineSectionContentCard(
+      contentDeltaJson: section.contentDeltaJson,
+    );
   }
 }
 
-class RoutineEditSheet extends ConsumerStatefulWidget {
-  const RoutineEditSheet({super.key, required this.session});
+class RoutineSectionContentCard extends StatelessWidget {
+  const RoutineSectionContentCard({super.key, required this.contentDeltaJson});
+
+  final String contentDeltaJson;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: RichTextContentViewer(deltaJson: contentDeltaJson),
+      ),
+    );
+  }
+}
+
+quill.QuillController routineQuillControllerFromDeltaJson(
+  String deltaJson, {
+  bool readOnly = false,
+}) {
+  return richTextControllerFromDeltaJson(deltaJson, readOnly: readOnly);
+}
+
+String routineQuillControllerToDeltaJson(quill.QuillController controller) {
+  return richTextControllerToDeltaJson(controller);
+}
+
+quill.Attribute routineFormatAttributeForToggle(
+  quill.QuillController controller,
+  quill.Attribute attribute,
+) {
+  return richTextFormatAttributeForToggle(controller, attribute);
+}
+
+class RoutineEditScreen extends ConsumerStatefulWidget {
+  const RoutineEditScreen({super.key, required this.session});
 
   final PrayerSession session;
 
   @override
-  ConsumerState<RoutineEditSheet> createState() => _RoutineEditSheetState();
+  ConsumerState<RoutineEditScreen> createState() => _RoutineEditScreenState();
 }
 
-class _RoutineEditSheetState extends ConsumerState<RoutineEditSheet> {
+class _RoutineEditScreenState extends ConsumerState<RoutineEditScreen> {
   final _name = TextEditingController();
-  final _title = TextEditingController();
-  final _text = TextEditingController();
-  RoutineSection? _editingSection;
   bool _busy = false;
 
   @override
@@ -565,145 +639,79 @@ class _RoutineEditSheetState extends ConsumerState<RoutineEditSheet> {
   @override
   void dispose() {
     _name.dispose();
-    _title.dispose();
-    _text.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(
-        24,
-        24,
-        24,
-        MediaQuery.of(context).viewInsets.bottom + 24,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Edit routine', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _name,
-            decoration: const InputDecoration(labelText: 'Routine name'),
-          ),
-          const SizedBox(height: 8),
-          ElevatedButton(
-            onPressed: _busy ? null : _saveName,
-            child: const Text('Save routine name'),
-          ),
-          const SizedBox(height: 16),
-          Text('Sections', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          StreamBuilder<List<RoutineSection>>(
-            stream: ref
-                .watch(prayerSessionRepositoryProvider)
-                .watchSections(widget.session.id),
-            builder: (context, snapshot) {
-              final sections = sortedRoutineSections(snapshot.data ?? const []);
-              return Column(
+    return StreamBuilder<List<RoutineSection>>(
+      stream: ref
+          .watch(prayerSessionRepositoryProvider)
+          .watchSections(widget.session.id),
+      builder: (context, snapshot) {
+        final sections = sortedRoutineSections(snapshot.data ?? const []);
+        return Scaffold(
+          appBar: AppBar(title: const Text('Edit routine')),
+          body: SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(24, 24, 24, 96),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  for (final section in sections)
-                    ListTile(
-                      title: Text(
-                        section.title.isEmpty
-                            ? section.type.toString()
-                            : section.title,
-                      ),
-                      subtitle: Text(routineSectionTypeToString(section.type)),
-                      trailing: Wrap(
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.arrow_upward),
-                            tooltip: 'Move ${section.title} up',
-                            onPressed: _busy
-                                ? null
-                                : () => _moveSection(section, sections, -1),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.arrow_downward),
-                            tooltip: 'Move ${section.title} down',
-                            onPressed: _busy
-                                ? null
-                                : () => _moveSection(section, sections, 1),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.edit_outlined),
-                            tooltip: 'Edit ${section.title}',
-                            onPressed: _busy ? null : () => _edit(section),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.remove_circle_outline),
-                            tooltip: 'Remove ${section.title}',
-                            onPressed: _busy ? null : () => _remove(section.id),
-                          ),
-                        ],
+                  TextField(
+                    controller: _name,
+                    decoration: const InputDecoration(
+                      labelText: 'Routine name',
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  ElevatedButton(
+                    onPressed: _busy ? null : _saveName,
+                    child: const Text('Save routine name'),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Sections',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  if (sections.isEmpty)
+                    const EmptyCard(text: 'Add a section to begin.')
+                  else
+                    ReorderableListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      buildDefaultDragHandles: false,
+                      itemCount: sections.length,
+                      onReorder: _busy
+                          ? (_, _) {}
+                          : (oldIndex, newIndex) =>
+                                _reorderSections(oldIndex, newIndex, sections),
+                      itemBuilder: (context, index) => _RoutineSectionTile(
+                        key: ValueKey(sections[index].id),
+                        index: index,
+                        section: sections[index],
+                        busy: _busy,
+                        onEdit: _openSectionEditor,
                       ),
                     ),
+                  const SizedBox(height: 12),
+                  OutlinedButton(
+                    onPressed: _busy ? null : _archiveRoutine,
+                    child: const Text('Archive routine'),
+                  ),
                 ],
-              );
-            },
-          ),
-          const SizedBox(height: 12),
-          Text('Add a section', style: Theme.of(context).textTheme.titleMedium),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _title,
-            decoration: const InputDecoration(labelText: 'Section title'),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _text,
-            decoration: const InputDecoration(labelText: 'Section text'),
-            minLines: 4,
-            maxLines: 8,
-          ),
-          const SizedBox(height: 12),
-          ElevatedButton(
-            onPressed: _busy ? null : _saveOrAddCustomText,
-            child: Text(
-              _editingSection == null ? 'Add custom text' : 'Save section',
+              ),
             ),
           ),
-          TextButton(
-            onPressed: _busy ? null : _addRequestFeed,
-            child: const Text('Add request feed'),
+          floatingActionButton: FloatingActionButton(
+            tooltip: 'Add section',
+            onPressed: _busy ? null : () => _addFromFab(sections),
+            child: const Icon(Icons.add),
           ),
-          TextButton(
-            onPressed: _busy
-                ? null
-                : () => _addSection(RoutineSectionType.heading),
-            child: const Text('Add heading'),
-          ),
-          TextButton(
-            onPressed: _busy
-                ? null
-                : () => _addSection(RoutineSectionType.silence),
-            child: const Text('Add silence'),
-          ),
-          TextButton(
-            onPressed: _busy
-                ? null
-                : () => _addSection(RoutineSectionType.readingPlaceholder),
-            child: const Text('Add reading placeholder'),
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton(
-            onPressed: _busy ? null : _archiveRoutine,
-            child: const Text('Archive routine'),
-          ),
-        ],
-      ),
+        );
+      },
     );
-  }
-
-  void _edit(RoutineSection section) {
-    setState(() {
-      _editingSection = section;
-      _title.text = section.title;
-      _text.text = section.text;
-    });
   }
 
   Future<void> _saveName() async {
@@ -728,87 +736,25 @@ class _RoutineEditSheetState extends ConsumerState<RoutineEditSheet> {
     }
   }
 
-  Future<void> _remove(String sectionId) async {
-    setState(() => _busy = true);
-    try {
-      await ref.read(prayerSessionRepositoryProvider).removeSection(sectionId);
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _moveSection(
-    RoutineSection section,
+  Future<void> _reorderSections(
+    int oldIndex,
+    int newIndex,
     List<RoutineSection> sections,
-    int direction,
   ) async {
-    final index = sections.indexWhere((item) => item.id == section.id);
-    final targetIndex = index + direction;
-    if (index < 0 || targetIndex < 0 || targetIndex >= sections.length) return;
-    final target = sections[targetIndex];
+    if (newIndex > oldIndex) newIndex -= 1;
+    if (oldIndex == newIndex) return;
+    final reordered = [...sections];
+    final moved = reordered.removeAt(oldIndex);
+    reordered.insert(newIndex, moved);
     setState(() => _busy = true);
     try {
-      await ref
-          .read(prayerSessionRepositoryProvider)
-          .updateSection(
-            RoutineSection(
-              id: section.id,
-              sessionId: section.sessionId,
-              userId: section.userId,
-              type: section.type,
-              sortOrder: target.sortOrder,
-              status: section.status,
-              title: section.title,
-              text: section.text,
-            ),
-          );
-      await ref
-          .read(prayerSessionRepositoryProvider)
-          .updateSection(
-            RoutineSection(
-              id: target.id,
-              sessionId: target.sessionId,
-              userId: target.userId,
-              type: target.type,
-              sortOrder: section.sortOrder,
-              status: target.status,
-              title: target.title,
-              text: target.text,
-            ),
-          );
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  Future<void> _saveOrAddCustomText() async {
-    final editingSection = _editingSection;
-    if (editingSection == null) {
-      await _addSection(RoutineSectionType.customText);
-      return;
-    }
-    setState(() => _busy = true);
-    try {
-      await ref
-          .read(prayerSessionRepositoryProvider)
-          .updateSection(
-            RoutineSection(
-              id: editingSection.id,
-              sessionId: editingSection.sessionId,
-              userId: editingSection.userId,
-              type: editingSection.type,
-              sortOrder: editingSection.sortOrder,
-              status: editingSection.status,
-              title: _title.text,
-              text: _text.text,
-            ),
-          );
-      if (mounted) {
-        setState(() {
-          _editingSection = null;
-          _title.clear();
-          _text.clear();
-        });
+      for (var index = 0; index < reordered.length; index += 1) {
+        final section = reordered[index];
+        final sortOrder = (index + 1) * 1000;
+        if (section.sortOrder == sortOrder) continue;
+        await ref
+            .read(prayerSessionRepositoryProvider)
+            .updateSection(section.copyWith(sortOrder: sortOrder));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -818,40 +764,74 @@ class _RoutineEditSheetState extends ConsumerState<RoutineEditSheet> {
   Future<void> _addSection(RoutineSectionType type) async {
     setState(() => _busy = true);
     try {
+      final title = switch (type) {
+        RoutineSectionType.customText => 'Section',
+        RoutineSectionType.requestFeed => 'Prayer requests',
+        RoutineSectionType.silence => 'Section',
+        RoutineSectionType.readingPlaceholder => 'Section',
+      };
       await ref
           .read(prayerSessionRepositoryProvider)
           .addSection(
             sessionId: widget.session.id,
             type: type,
-            title: _title.text,
-            text: _text.text,
+            title: title,
+            contentDeltaJson: emptyRoutineDeltaJson(),
           );
-      if (mounted) {
-        setState(() {
-          _title.clear();
-          _text.clear();
-        });
-      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<void> _addRequestFeed() async {
-    setState(() => _busy = true);
-    try {
-      await ref
-          .read(prayerSessionRepositoryProvider)
-          .addSection(
-            sessionId: widget.session.id,
-            type: RoutineSectionType.requestFeed,
-            title: 'Prayer requests',
-            text: '',
-          );
-      if (mounted) _title.clear();
-    } finally {
-      if (mounted) setState(() => _busy = false);
+  Future<void> _addFromFab(List<RoutineSection> sections) async {
+    final hasRequestFeed = sections.any(
+      (section) => section.type == RoutineSectionType.requestFeed,
+    );
+    if (hasRequestFeed) {
+      await _addSection(RoutineSectionType.customText);
+      return;
     }
+    await _showAddSectionSheet();
+  }
+
+  void _openSectionEditor(RoutineSection section) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => RoutineSectionEditScreen(section: section),
+      ),
+    );
+  }
+
+  Future<void> _showAddSectionSheet() async {
+    final type = await showModalBottomSheet<RoutineSectionType>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          padding: const EdgeInsets.all(16),
+          children: [
+            Text('Add section', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            ListTile(
+              key: const ValueKey('add-section-custom_text'),
+              title: Text(
+                routineSectionTypeLabel(RoutineSectionType.customText),
+              ),
+              onTap: () =>
+                  Navigator.of(context).pop(RoutineSectionType.customText),
+            ),
+            ListTile(
+              key: const ValueKey('add-section-request_feed'),
+              title: const Text('Request feed'),
+              onTap: () =>
+                  Navigator.of(context).pop(RoutineSectionType.requestFeed),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (type == null || !mounted) return;
+    await _addSection(type);
   }
 
   Future<void> _archiveRoutine() async {
@@ -865,6 +845,223 @@ class _RoutineEditSheetState extends ConsumerState<RoutineEditSheet> {
       if (mounted) setState(() => _busy = false);
     }
   }
+}
+
+class RoutineSectionEditScreen extends ConsumerStatefulWidget {
+  const RoutineSectionEditScreen({super.key, required this.section});
+
+  final RoutineSection section;
+
+  @override
+  ConsumerState<RoutineSectionEditScreen> createState() =>
+      _RoutineSectionEditScreenState();
+}
+
+class _RoutineSectionEditScreenState
+    extends ConsumerState<RoutineSectionEditScreen> {
+  final _title = TextEditingController();
+  final _contentFocusNode = FocusNode();
+  final _contentScrollController = ScrollController();
+  late final quill.QuillController _content;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _title.text = widget.section.title;
+    _content = routineQuillControllerFromDeltaJson(
+      widget.section.contentDeltaJson,
+    );
+  }
+
+  @override
+  void dispose() {
+    _title.dispose();
+    _content.dispose();
+    _contentFocusNode.dispose();
+    _contentScrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final title = routineSectionDisplayTitle(widget.section);
+    return Scaffold(
+      appBar: AppBar(title: const Text('Edit section')),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                routineSectionTypeLabel(widget.section.type),
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _title,
+                decoration: const InputDecoration(labelText: 'Section title'),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Section text',
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
+              const SizedBox(height: 8),
+              RichTextFormatToolbar(
+                controller: _content,
+                focusNode: _contentFocusNode,
+                busy: _busy,
+              ),
+              const SizedBox(height: 8),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: RichTextContentEditor(
+                    controller: _content,
+                    focusNode: _contentFocusNode,
+                    scrollController: _contentScrollController,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  ElevatedButton(
+                    onPressed: _busy ? null : _save,
+                    child: const Text('Save section'),
+                  ),
+                  Tooltip(
+                    message: 'Remove $title',
+                    child: TextButton.icon(
+                      onPressed: _busy ? null : _remove,
+                      icon: const Icon(Icons.remove_circle_outline),
+                      label: const Text('Remove'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _save() async {
+    FocusScope.of(context).unfocus();
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(prayerSessionRepositoryProvider)
+          .updateSection(
+            widget.section.copyWith(
+              title: _title.text,
+              contentDeltaJson: routineQuillControllerToDeltaJson(_content),
+            ),
+          );
+      if (mounted) Navigator.of(context).pop();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _remove() async {
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(prayerSessionRepositoryProvider)
+          .removeSection(widget.section.id);
+      if (mounted) Navigator.of(context).pop();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+}
+
+class _RoutineSectionTile extends StatelessWidget {
+  const _RoutineSectionTile({
+    super.key,
+    required this.index,
+    required this.section,
+    required this.busy,
+    required this.onEdit,
+  });
+
+  final int index;
+  final RoutineSection section;
+  final bool busy;
+  final ValueChanged<RoutineSection> onEdit;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = routineSectionDisplayTitle(section);
+    return Card(
+      child: ListTile(
+        leading: ReorderableDragStartListener(
+          index: index,
+          enabled: !busy,
+          child: Semantics(
+            label: 'Reorder $title',
+            button: true,
+            child: const SizedBox(
+              width: 48,
+              height: 48,
+              child: Icon(Icons.drag_handle),
+            ),
+          ),
+        ),
+        title: Text(title),
+        subtitle: Text(routineSectionTypeLabel(section.type)),
+        trailing: IconButton(
+          tooltip: 'Edit $title',
+          onPressed: busy ? null : () => onEdit(section),
+          icon: const Icon(Icons.edit_outlined),
+        ),
+        onTap: busy ? null : () => onEdit(section),
+      ),
+    );
+  }
+}
+
+extension on RoutineSection {
+  RoutineSection copyWith({
+    int? sortOrder,
+    String? title,
+    String? contentDeltaJson,
+  }) {
+    return RoutineSection(
+      id: id,
+      sessionId: sessionId,
+      userId: userId,
+      type: type,
+      sortOrder: sortOrder ?? this.sortOrder,
+      status: status,
+      title: title ?? this.title,
+      contentDeltaJson: contentDeltaJson ?? this.contentDeltaJson,
+    );
+  }
+}
+
+String routineSectionDisplayTitle(RoutineSection section) {
+  final title = section.title.trim();
+  return title.isEmpty ? routineSectionTypeLabel(section.type) : title;
+}
+
+String routineSectionTypeLabel(RoutineSectionType type) {
+  return switch (type) {
+    RoutineSectionType.customText => 'Section',
+    RoutineSectionType.requestFeed => 'Request feed',
+    RoutineSectionType.silence => 'Section',
+    RoutineSectionType.readingPlaceholder => 'Section',
+  };
 }
 
 class ConsolidatedRequestFeed extends StatelessWidget {
@@ -1459,7 +1656,13 @@ class GroupDetailScreen extends ConsumerWidget {
 }
 
 typedef CreatePrayerRequest =
-    Future<void> Function({required String title, required String body});
+    Future<void> Function({
+      required String title,
+      required String body,
+      required String bodyDeltaJson,
+    });
+
+enum _RequestComposerStep { compose, groups }
 
 class PrayerComposerSheet extends ConsumerStatefulWidget {
   const PrayerComposerSheet({
@@ -1480,8 +1683,11 @@ class PrayerComposerSheet extends ConsumerStatefulWidget {
 
 class _PrayerComposerSheetState extends ConsumerState<PrayerComposerSheet> {
   final _title = TextEditingController();
-  final _body = TextEditingController();
+  late final quill.QuillController _body;
+  final _bodyFocusNode = FocusNode();
+  final _bodyScrollController = ScrollController();
   final Set<String> _selectedGroupIds = <String>{};
+  _RequestComposerStep _step = _RequestComposerStep.compose;
   bool _busy = false;
 
   List<VesperGroup> get _groups {
@@ -1496,6 +1702,7 @@ class _PrayerComposerSheetState extends ConsumerState<PrayerComposerSheet> {
   @override
   void initState() {
     super.initState();
+    _body = richTextControllerFromDeltaJson(emptyRichTextDeltaJson());
     final group = widget.group;
     if (group != null && widget.groups == null) {
       _selectedGroupIds.add(group.id);
@@ -1506,11 +1713,15 @@ class _PrayerComposerSheetState extends ConsumerState<PrayerComposerSheet> {
   void dispose() {
     _title.dispose();
     _body.dispose();
+    _bodyFocusNode.dispose();
+    _bodyScrollController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final showGroupStep =
+        _showGroupSelector && _step == _RequestComposerStep.groups;
     return Padding(
       padding: EdgeInsets.fromLTRB(
         24,
@@ -1522,29 +1733,38 @@ class _PrayerComposerSheetState extends ConsumerState<PrayerComposerSheet> {
         shrinkWrap: true,
         children: [
           Text(
-            'Share a Prayer Request',
+            showGroupStep ? 'Choose groups' : 'Share a Prayer Request',
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: 12),
-          TextField(
-            controller: _title,
-            decoration: const InputDecoration(labelText: 'Title'),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _body,
-            decoration: const InputDecoration(labelText: 'Request'),
-            keyboardType: TextInputType.multiline,
-            minLines: 5,
-            maxLines: 8,
-          ),
-          if (_showGroupSelector) ...[
-            const SizedBox(height: 16),
-            Text(
-              'Choose groups',
-              style: Theme.of(context).textTheme.titleLarge,
+          if (!showGroupStep) ...[
+            TextField(
+              controller: _title,
+              decoration: const InputDecoration(labelText: 'Title'),
+            ),
+            const SizedBox(height: 12),
+            Text('Request', style: Theme.of(context).textTheme.labelLarge),
+            const SizedBox(height: 8),
+            RichTextFormatToolbar(
+              controller: _body,
+              focusNode: _bodyFocusNode,
+              busy: _busy,
             ),
             const SizedBox(height: 8),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: RichTextContentEditor(
+                  controller: _body,
+                  focusNode: _bodyFocusNode,
+                  scrollController: _bodyScrollController,
+                  minHeight: 80,
+                  maxHeight: 160,
+                ),
+              ),
+            ),
+          ],
+          if (showGroupStep) ...[
             CheckboxListTile(
               value:
                   _groups.isNotEmpty &&
@@ -1585,13 +1805,43 @@ class _PrayerComposerSheetState extends ConsumerState<PrayerComposerSheet> {
             ),
           ],
           const SizedBox(height: 12),
-          ElevatedButton(
-            onPressed: _busy ? null : _submit,
-            child: const Text('Request Prayer'),
-          ),
+          if (showGroupStep)
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                TextButton(
+                  onPressed: _busy
+                      ? null
+                      : () => setState(
+                          () => _step = _RequestComposerStep.compose,
+                        ),
+                  child: const Text('Back'),
+                ),
+                ElevatedButton(
+                  onPressed: _busy ? null : _submit,
+                  child: const Text('Request Prayer'),
+                ),
+              ],
+            )
+          else
+            ElevatedButton(
+              onPressed: _busy
+                  ? null
+                  : _showGroupSelector
+                  ? _continueToGroups
+                  : _submit,
+              child: Text(_showGroupSelector ? 'Continue' : 'Request Prayer'),
+            ),
         ],
       ),
     );
+  }
+
+  void _continueToGroups() {
+    FocusScope.of(context).unfocus();
+    setState(() => _step = _RequestComposerStep.groups);
   }
 
   Future<void> _submit() async {
@@ -1604,6 +1854,8 @@ class _PrayerComposerSheetState extends ConsumerState<PrayerComposerSheet> {
     }
     setState(() => _busy = true);
     try {
+      final bodyDeltaJson = richTextControllerToDeltaJson(_body);
+      final body = plainTextFromRichTextDeltaJson(bodyDeltaJson);
       final createRequest = widget.onCreateRequest;
       if (createRequest == null) {
         final repository = ref.read(prayerRequestRepositoryProvider);
@@ -1611,14 +1863,18 @@ class _PrayerComposerSheetState extends ConsumerState<PrayerComposerSheet> {
           await repository.createRequest(
             group: group,
             title: _title.text,
-            body: _body.text,
+            body: body,
+            bodyDeltaJson: bodyDeltaJson,
           );
         }
       } else {
-        await createRequest(title: _title.text, body: _body.text);
+        await createRequest(
+          title: _title.text,
+          body: body,
+          bodyDeltaJson: bodyDeltaJson,
+        );
       }
       _title.clear();
-      _body.clear();
       if (mounted) {
         final messenger = ScaffoldMessenger.of(context);
         Navigator.of(context).pop();
@@ -1887,7 +2143,11 @@ class RequestCard extends ConsumerWidget {
                         ],
                       ),
                       const SizedBox(height: 8),
-                      Text(request.body),
+                      RichTextContentViewer(
+                        deltaJson: request.bodyDeltaJson.trim().isEmpty
+                            ? plainTextToRichTextDeltaJson(request.body)
+                            : request.bodyDeltaJson,
+                      ),
                     ],
                   ),
                 ),
@@ -2055,20 +2315,28 @@ class RequestUpdateSheet extends ConsumerStatefulWidget {
 
 class _RequestUpdateSheetState extends ConsumerState<RequestUpdateSheet> {
   late final TextEditingController _title;
-  late final TextEditingController _body;
+  late final quill.QuillController _body;
+  final _bodyFocusNode = FocusNode();
+  final _bodyScrollController = ScrollController();
   bool _busy = false;
 
   @override
   void initState() {
     super.initState();
     _title = TextEditingController(text: widget.request.title);
-    _body = TextEditingController(text: widget.request.body);
+    _body = richTextControllerFromDeltaJson(
+      widget.request.bodyDeltaJson.trim().isEmpty
+          ? plainTextToRichTextDeltaJson(widget.request.body)
+          : widget.request.bodyDeltaJson,
+    );
   }
 
   @override
   void dispose() {
     _title.dispose();
     _body.dispose();
+    _bodyFocusNode.dispose();
+    _bodyScrollController.dispose();
     super.dispose();
   }
 
@@ -2091,12 +2359,25 @@ class _RequestUpdateSheetState extends ConsumerState<RequestUpdateSheet> {
             decoration: const InputDecoration(labelText: 'Title'),
           ),
           const SizedBox(height: 12),
-          TextField(
+          Text('Request', style: Theme.of(context).textTheme.labelLarge),
+          const SizedBox(height: 8),
+          RichTextFormatToolbar(
             controller: _body,
-            decoration: const InputDecoration(labelText: 'Request'),
-            keyboardType: TextInputType.multiline,
-            minLines: 5,
-            maxLines: 8,
+            focusNode: _bodyFocusNode,
+            busy: _busy,
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: RichTextContentEditor(
+                controller: _body,
+                focusNode: _bodyFocusNode,
+                scrollController: _bodyScrollController,
+                minHeight: 80,
+                maxHeight: 160,
+              ),
+            ),
           ),
           const SizedBox(height: 12),
           ElevatedButton(
@@ -2111,13 +2392,15 @@ class _RequestUpdateSheetState extends ConsumerState<RequestUpdateSheet> {
   Future<void> _submit() async {
     setState(() => _busy = true);
     try {
+      final bodyDeltaJson = richTextControllerToDeltaJson(_body);
       await ref
           .read(prayerRequestRepositoryProvider)
           .updateRequest(
             group: widget.group,
             request: widget.request,
             title: _title.text,
-            body: _body.text,
+            body: plainTextFromRichTextDeltaJson(bodyDeltaJson),
+            bodyDeltaJson: bodyDeltaJson,
           );
       if (mounted) Navigator.of(context).pop();
     } on Exception {

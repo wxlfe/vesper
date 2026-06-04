@@ -1,4 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:vesper/shared/rich_text/rich_text_delta.dart';
+
+export 'package:vesper/shared/rich_text/rich_text_delta.dart';
 
 class VesperUserProfile {
   const VesperUserProfile({
@@ -123,6 +126,7 @@ class PrayerRequestSummary {
     required this.createdAt,
     required this.title,
     required this.body,
+    this.bodyDeltaJson = '',
   });
 
   final String id;
@@ -132,6 +136,7 @@ class PrayerRequestSummary {
   final DateTime createdAt;
   final String title;
   final String body;
+  final String bodyDeltaJson;
 }
 
 class PrayerAction {
@@ -229,18 +234,12 @@ class RequestReport {
   }
 }
 
-enum RoutineSectionType {
-  customText,
-  requestFeed,
-  heading,
-  silence,
-  readingPlaceholder,
-}
+enum RoutineSectionType { customText, requestFeed, silence, readingPlaceholder }
 
 RoutineSectionType routineSectionTypeFromString(String value) {
   return switch (value) {
     'request_feed' => RoutineSectionType.requestFeed,
-    'heading' => RoutineSectionType.heading,
+    'heading' => RoutineSectionType.customText,
     'silence' => RoutineSectionType.silence,
     'reading_placeholder' => RoutineSectionType.readingPlaceholder,
     _ => RoutineSectionType.customText,
@@ -251,7 +250,6 @@ String routineSectionTypeToString(RoutineSectionType value) {
   return switch (value) {
     RoutineSectionType.customText => 'custom_text',
     RoutineSectionType.requestFeed => 'request_feed',
-    RoutineSectionType.heading => 'heading',
     RoutineSectionType.silence => 'silence',
     RoutineSectionType.readingPlaceholder => 'reading_placeholder',
   };
@@ -286,7 +284,7 @@ class RoutineSection {
     required this.sortOrder,
     required this.status,
     required this.title,
-    required this.text,
+    required this.contentDeltaJson,
   });
 
   final String id;
@@ -296,7 +294,50 @@ class RoutineSection {
   final int sortOrder;
   final String status;
   final String title;
-  final String text;
+  final String contentDeltaJson;
+}
+
+const routineContentFormatQuillDeltaJson = 'quill_delta_json';
+
+String emptyRoutineDeltaJson() {
+  return emptyRichTextDeltaJson();
+}
+
+String plainTextToRoutineDeltaJson(String text) {
+  return plainTextToRichTextDeltaJson(text);
+}
+
+String routineSectionContentDeltaJsonFromPayload(Map<String, dynamic> payload) {
+  return richTextDeltaJsonFromPayload(
+    payload: payload,
+    deltaKey: 'contentDeltaJson',
+    legacyTextKey: 'text',
+  );
+}
+
+bool routineDeltaJsonIsBlank(String deltaJson) {
+  return richTextDeltaJsonIsBlank(deltaJson);
+}
+
+Map<String, dynamic> requestContentPayload({
+  required String title,
+  required String body,
+  required String bodyDeltaJson,
+}) {
+  return {
+    'title': title.trim(),
+    'body': body.trim(),
+    'bodyFormat': richTextContentFormatQuillDeltaJson,
+    'bodyDeltaJson': bodyDeltaJson,
+  };
+}
+
+String requestBodyDeltaJsonFromPayload(Map<String, dynamic> payload) {
+  return richTextDeltaJsonFromPayload(
+    payload: payload,
+    deltaKey: 'bodyDeltaJson',
+    legacyTextKey: 'body',
+  );
 }
 
 List<RoutineSection> sortedRoutineSections(Iterable<RoutineSection> sections) {

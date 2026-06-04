@@ -126,7 +126,7 @@ class PrayerSessionRepository {
     required String sessionId,
     required RoutineSectionType type,
     required String title,
-    required String text,
+    required String contentDeltaJson,
   }) async {
     final doc = _firestore.collection('routine_sections').doc();
     final key = await _userContentSecretKey();
@@ -137,11 +137,12 @@ class PrayerSessionRepository {
         documentId: doc.id,
         scopeId: _uid,
         keyVersion: 1,
-        payloadVersion: 1,
+        payloadVersion: 2,
       ),
       value: {
         'title': title.trim(),
-        'text': text.trim(),
+        'contentFormat': routineContentFormatQuillDeltaJson,
+        'contentDeltaJson': contentDeltaJson,
         'type': routineSectionTypeToString(type),
       },
     );
@@ -166,11 +167,12 @@ class PrayerSessionRepository {
         documentId: section.id,
         scopeId: _uid,
         keyVersion: 1,
-        payloadVersion: 1,
+        payloadVersion: 2,
       ),
       value: {
         'title': section.title.trim(),
-        'text': section.text.trim(),
+        'contentFormat': routineContentFormatQuillDeltaJson,
+        'contentDeltaJson': section.contentDeltaJson,
         'type': routineSectionTypeToString(section.type),
       },
     );
@@ -254,7 +256,7 @@ class PrayerSessionRepository {
         sortOrder: data['sortOrder'] as int? ?? 0,
         status: data['status'] as String? ?? 'active',
         title: decrypted['title'] as String? ?? '',
-        text: decrypted['text'] as String? ?? '',
+        contentDeltaJson: routineSectionContentDeltaJsonFromPayload(decrypted),
       );
     } on EncryptedPayloadException {
       return null;

@@ -8,6 +8,7 @@ Users need to share prayer requests with one or more trusted groups quickly from
 
 - Provide a centered bottom `+` action for creating prayer requests.
 - Let users choose one, many, or all eligible groups before submitting a request.
+- Let users compose request bodies with simple rich text formatting.
 - Encrypt one request per selected group using that group's active key.
 - Keep group administration to Leader/Member roles, join requests, reports, and admin history.
 - Keep group creation, joining, administration, and group-specific feeds inside the `Groups` tab.
@@ -42,6 +43,8 @@ The centered bottom `+` action should be available across the signed-in app and 
 
 The bottom app bar should show `Pray` on the left, the centered `+` request action, and `Groups` on the right. Group creation, joining, invite codes, administration, and group-specific request feeds belong under `Groups`.
 
+The multi-group request composer should use two steps inside one sheet. The first step shows only the request title and request body editor. The second step shows group selection and the final submit action. Group-specific composers opened from an individual group should remain direct because the audience is already fixed.
+
 The group selector should make audience selection explicit. Each group row should include a checkbox, group name, and optional quiet metadata. The `Select All` row should clearly indicate checked, unchecked, or mixed state where supported.
 
 If no group is selected, use calm validation copy:
@@ -66,11 +69,13 @@ Use the canonical collections in [Firestore Schema](../../architecture/firestore
 - `request_reports` for metadata-only reports.
 - `audit_events` for metadata-only admin history.
 
-Do not create a shared multi-group request document. Do not store a plaintext list of selected groups as part of the request content. If local draft continuity is needed, store local encrypted draft metadata.
+Do not create a shared multi-group request document. Do not store a plaintext list of selected groups as part of the request content. Request body rich text uses encrypted `bodyFormat: "quill_delta_json"` and `bodyDeltaJson`, while retaining encrypted plaintext `body` as a compatibility fallback. If local draft continuity is needed, store local encrypted draft metadata.
 
 ## Security And Privacy
 
 The request composer must encrypt request content separately for each selected group. The backend receives only ciphertext, nonce, algorithm, key version, group ID, timestamps, status, and other non-sensitive metadata.
+
+The request title, plaintext body fallback, and rich text body Delta are all sensitive plaintext before encryption. They must not be written to Firestore metadata, logs, analytics, reports, Cloud Functions, notifications, or summaries.
 
 Cloud Functions may validate membership and fanout generic notifications, but must not receive plaintext request title, body, tags, summaries, private notes, or personal prayer content.
 
@@ -87,6 +92,10 @@ On replay, each group write should revalidate membership and active key version.
 - The signed-in bottom app bar includes a centered `+` action for creating a prayer request.
 - The centered `+` action opens the request composer from either `Pray` or `Groups`.
 - The composer lists active groups where the user is a member.
+- The multi-group composer shows title and request fields before group selection.
+- Group selection appears on the second step of the multi-group composer.
+- A group-specific composer can submit directly without a group-selection step.
+- The request body composer supports simple rich text and stores it only inside the encrypted payload.
 - Each group can be selected with a checkbox.
 - `Select All` selects all eligible groups.
 - The composer shows selected-count feedback.

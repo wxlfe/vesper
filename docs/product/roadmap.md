@@ -43,7 +43,7 @@ Core features:
 - Follow-up reminders
 - User-defined scheduled prayer sessions
 - User-private prayer book
-- Routine builder with custom text sections, headings, silence, and request-feed sections
+- Routine builder with simple user-authored sections and a request-feed section included by default
 - Full-screen step-by-step routine reader
 - Cross-device sync for encrypted routine structure and personal prayers
 - Generic prayer-session reminders
@@ -102,7 +102,7 @@ Candidate features:
 Routine sharing must follow these rules:
 
 - Shared routines include all sections and ordering.
-- Shared custom text sections include the user's shared content.
+- Shared user-authored sections include the user's shared content.
 - Shared request-feed sections include only placement and configuration.
 - The recipient's request-feed section is populated from the recipient's own groups.
 - The sharer's group requests and request feed contents are never copied into the shared routine.
