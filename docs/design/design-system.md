@@ -93,7 +93,7 @@ text-transform: uppercase;
 
 ## Color
 
-The core palette should feel like parchment, ink, and restrained illumination. Cream backgrounds should be warm without becoming yellowed or low contrast. Accent colors should be rich but muted.
+The core palette should feel like parchment, ink, and restrained illumination. Cream backgrounds should be warm without becoming yellowed or low contrast. Accent colors should be rich but muted. The primary UI accent follows the Western Gregorian liturgical calendar so the app quietly reflects the current season without changing layout or meaning.
 
 ### Light Mode
 
@@ -104,12 +104,15 @@ Raised surface: #f6ead1
 Primary text:   #241c14
 Secondary text: #6f5f4a
 Muted text:     #8c7a61
-Divider:        #dfcfab
-Gold accent:    #b58a32
-Oxblood:        #8f2f2f
-Lapis:          #294f7a
-Malachite:      #4f6f53
-Umber:          #7a5635
+Divider:          #dfcfab
+Gold accent:      #b58a32
+Ordinary green:   #208070
+Advent/Lent:      #583070
+Epiphany lapis:   #294f7a
+Pentecost red:    #8f2f2f
+Good Friday ink:  #151515
+Malachite:        #4f6f53
+Umber:            #7a5635
 ```
 
 ### Dark Mode
@@ -121,15 +124,31 @@ Raised surface: #302418
 Primary text:   #f6ead1
 Secondary text: #c9b894
 Muted text:     #a8926c
-Divider:        #4a3826
-Gold accent:    #d1aa55
-Oxblood:        #c46a60
-Lapis:          #8fb4d8
-Malachite:      #8eb28b
-Umber:          #c2925f
+Divider:             #4a3826
+Gold accent:         #d1aa55
+Ordinary green:      #8eb28b
+Advent/Lent:         #a78bd0
+Epiphany lapis:      #8fb4d8
+Pentecost red:       #c46a60
+Good Friday ash:     #9a9a9a
+Malachite:           #8eb28b
+Umber:               #c2925f
 ```
 
 Dark mode should feel like warm ink and candlelit parchment, not cyber, neon, or high-glare. Avoid saturated blue, bright green, and high-contrast gold-on-black ornament unless contrast and visual calm are preserved.
+
+### Seasonal Primary Accent
+
+The primary UI color is seasonal, based on the Western Gregorian church calendar:
+
+- Ordinary Time: green
+- Advent, Lent, and Holy Week outside Good Friday: purple
+- Christmas and Easter: muted gold
+- Epiphany: lapis
+- Pentecost: oxblood red
+- Good Friday: ink black in light mode and ash gray in dark mode
+
+Seasonal color affects atmosphere only. It must never be the only indication of status, selection, privacy, errors, completion, or current routine position. Foreground colors must be chosen for contrast against each seasonal primary.
 
 ## Illumination And Ornament
 

@@ -3,23 +3,98 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:vesper/core/theme/app_theme.dart';
 
 void main() {
-  test('light theme uses the green palette', () {
-    final theme = AppTheme.light;
+  test('light theme uses the manuscript icon palette', () {
+    final theme = AppTheme.lightForDate(DateTime(2026, 6, 4));
 
-    expect(theme.scaffoldBackgroundColor, const Color(0xfff4f6f0));
-    expect(theme.cardTheme.color, const Color(0xffffffff));
-    expect(theme.colorScheme.primary, const Color(0xff5f725b));
-    expect(theme.textTheme.bodyLarge?.color, const Color(0xff242b24));
-    expect(theme.textTheme.bodyMedium?.color, const Color(0xff6a7267));
+    expect(theme.scaffoldBackgroundColor, const Color(0xfffbf3df));
+    expect(theme.cardTheme.color, const Color(0xfffffaf0));
+    expect(theme.colorScheme.primary, const Color(0xff208070));
+    expect(theme.colorScheme.tertiary, const Color(0xff583070));
+    expect(theme.textTheme.bodyLarge?.color, const Color(0xff241c14));
+    expect(theme.textTheme.bodyMedium?.color, const Color(0xff6f5f4a));
   });
 
-  test('dark theme uses the green palette', () {
-    final theme = AppTheme.dark;
+  test('dark theme uses accessible icon palette variants', () {
+    final theme = AppTheme.darkForDate(DateTime(2026, 6, 4));
 
-    expect(theme.scaffoldBackgroundColor, const Color(0xff111610));
-    expect(theme.cardTheme.color, const Color(0xff1b211a));
-    expect(theme.colorScheme.primary, const Color(0xffa3b39d));
-    expect(theme.textTheme.bodyLarge?.color, const Color(0xffedf2ea));
-    expect(theme.textTheme.bodyMedium?.color, const Color(0xffa9b1a5));
+    expect(theme.scaffoldBackgroundColor, const Color(0xff19130d));
+    expect(theme.cardTheme.color, const Color(0xff241b12));
+    expect(theme.colorScheme.primary, const Color(0xff8eb28b));
+    expect(theme.colorScheme.tertiary, const Color(0xffa78bd0));
+    expect(theme.textTheme.bodyLarge?.color, const Color(0xfff6ead1));
+    expect(theme.textTheme.bodyMedium?.color, const Color(0xffc9b894));
+  });
+
+  test('light theme primary follows the liturgical season', () {
+    expect(
+      AppTheme.lightForDate(DateTime(2026, 11, 29)).colorScheme.primary,
+      const Color(0xff583070),
+    );
+    expect(
+      AppTheme.lightForDate(DateTime(2026, 12, 25)).colorScheme.primary,
+      const Color(0xffb58a32),
+    );
+    expect(
+      AppTheme.lightForDate(DateTime(2026, 1, 6)).colorScheme.primary,
+      const Color(0xff294f7a),
+    );
+    expect(
+      AppTheme.lightForDate(DateTime(2026, 2, 18)).colorScheme.primary,
+      const Color(0xff583070),
+    );
+    expect(
+      AppTheme.lightForDate(DateTime(2026, 3, 29)).colorScheme.primary,
+      const Color(0xff583070),
+    );
+    expect(
+      AppTheme.lightForDate(DateTime(2026, 4, 3)).colorScheme.primary,
+      const Color(0xff151515),
+    );
+    expect(
+      AppTheme.lightForDate(DateTime(2026, 4, 5)).colorScheme.primary,
+      const Color(0xffb58a32),
+    );
+    expect(
+      AppTheme.lightForDate(DateTime(2026, 5, 24)).colorScheme.primary,
+      const Color(0xff8f2f2f),
+    );
+  });
+
+  test('seasonal primary foreground chooses accessible contrast', () {
+    expect(
+      AppTheme.lightForDate(DateTime(2026, 12, 25)).colorScheme.onPrimary,
+      const Color(0xff241c14),
+    );
+    expect(
+      AppTheme.lightForDate(DateTime(2026, 4, 3)).colorScheme.onPrimary,
+      Colors.white,
+    );
+    expect(
+      AppTheme.darkForDate(DateTime(2026, 4, 3)).colorScheme.onPrimary,
+      const Color(0xff19130d),
+    );
+  });
+
+  test('dark theme primary follows accessible liturgical variants', () {
+    expect(
+      AppTheme.darkForDate(DateTime(2026, 11, 29)).colorScheme.primary,
+      const Color(0xffa78bd0),
+    );
+    expect(
+      AppTheme.darkForDate(DateTime(2026, 12, 25)).colorScheme.primary,
+      const Color(0xffd1aa55),
+    );
+    expect(
+      AppTheme.darkForDate(DateTime(2026, 1, 6)).colorScheme.primary,
+      const Color(0xff8fb4d8),
+    );
+    expect(
+      AppTheme.darkForDate(DateTime(2026, 4, 3)).colorScheme.primary,
+      const Color(0xff9a9a9a),
+    );
+    expect(
+      AppTheme.darkForDate(DateTime(2026, 5, 24)).colorScheme.primary,
+      const Color(0xffc46a60),
+    );
   });
 }

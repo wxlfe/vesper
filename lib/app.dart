@@ -9,6 +9,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:vesper/core/models/app_models.dart';
 import 'package:vesper/core/services/app_providers.dart';
 import 'package:vesper/core/theme/app_theme.dart';
+import 'package:vesper/core/widgets/manuscript_widgets.dart';
 import 'package:vesper/features/groups/data/group_repository.dart';
 import 'package:vesper/features/profile/data/user_profile_repository.dart';
 import 'package:vesper/shared/rich_text/rich_text_widgets.dart';
@@ -590,10 +591,11 @@ class RoutineSectionContentCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: RichTextContentViewer(deltaJson: contentDeltaJson),
+    return ManuscriptCard(
+      innerBorder: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [RichTextContentViewer(deltaJson: contentDeltaJson)],
       ),
     );
   }
@@ -915,14 +917,13 @@ class _RoutineSectionEditScreenState
                 busy: _busy,
               ),
               const SizedBox(height: 8),
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: RichTextContentEditor(
-                    controller: _content,
-                    focusNode: _contentFocusNode,
-                    scrollController: _contentScrollController,
-                  ),
+              ManuscriptCard(
+                padding: const EdgeInsets.all(12),
+                innerBorder: true,
+                child: RichTextContentEditor(
+                  controller: _content,
+                  focusNode: _contentFocusNode,
+                  scrollController: _contentScrollController,
                 ),
               ),
               const SizedBox(height: 12),
@@ -1003,7 +1004,8 @@ class _RoutineSectionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final title = routineSectionDisplayTitle(section);
-    return Card(
+    return ManuscriptCard(
+      padding: const EdgeInsets.all(8),
       child: ListTile(
         leading: ReorderableDragStartListener(
           index: index,
@@ -1287,17 +1289,23 @@ class GroupCard extends ConsumerWidget {
         context,
         'Leaving groups will be added with membership safeguards.',
       ),
-      child: Card(
+      child: ManuscriptCard(
         child: StreamBuilder<int>(
           stream: repository.watchRequestCount(group.id),
           builder: (context, snapshot) {
             final total = snapshot.data ?? 0;
             return ListTile(
-              contentPadding: const EdgeInsets.all(20),
+              contentPadding: EdgeInsets.zero,
               title: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(group.name),
+                  const RubricText('Private group'),
+                  const SizedBox(height: 6),
+                  Text(
+                    group.name,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 6),
                   Text(
                     group.description.isEmpty
                         ? 'Private to this group.'
@@ -1306,7 +1314,10 @@ class GroupCard extends ConsumerWidget {
                   ),
                 ],
               ),
-              subtitle: Text('$total ${total == 1 ? 'request' : 'requests'}'),
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text('$total ${total == 1 ? 'request' : 'requests'}'),
+              ),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute<void>(
@@ -1640,14 +1651,14 @@ class GroupDetailScreen extends ConsumerWidget {
             padding: const EdgeInsets.all(20),
             children: [RequestList(group: group, isLeader: isLeader)],
           ),
-          floatingActionButton: FloatingActionButton.extended(
+          floatingActionButton: FloatingActionButton(
             onPressed: () => showModalBottomSheet<void>(
               context: context,
               isScrollControlled: true,
               builder: (_) => PrayerComposerSheet(group: group),
             ),
-            label: const Text('New Request'),
-            icon: const Icon(Icons.add_comment_outlined),
+            tooltip: 'Submit prayer request',
+            child: const Icon(Icons.add),
           ),
         );
       },
@@ -1751,16 +1762,15 @@ class _PrayerComposerSheetState extends ConsumerState<PrayerComposerSheet> {
               busy: _busy,
             ),
             const SizedBox(height: 8),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: RichTextContentEditor(
-                  controller: _body,
-                  focusNode: _bodyFocusNode,
-                  scrollController: _bodyScrollController,
-                  minHeight: 80,
-                  maxHeight: 160,
-                ),
+            ManuscriptCard(
+              padding: const EdgeInsets.all(12),
+              innerBorder: true,
+              child: RichTextContentEditor(
+                controller: _body,
+                focusNode: _bodyFocusNode,
+                scrollController: _bodyScrollController,
+                minHeight: 80,
+                maxHeight: 160,
               ),
             ),
           ],
@@ -2030,156 +2040,160 @@ class RequestCard extends ConsumerWidget {
         final activity =
             prayerActivity ??
             const PrayerActivity(prayedCount: 0, hasCurrentUserPrayed: false);
-        return Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                GestureDetector(
-                  onDoubleTap: isRequester
-                      ? null
-                      : onDoubleTapPrayed ??
-                            () => ref
-                                .read(prayerRequestRepositoryProvider)
-                                .markPrayed(group.id, request.id),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  request.title,
-                                  style: Theme.of(context).textTheme.titleLarge,
-                                ),
-                                const SizedBox(height: 6),
-                                Text(
-                                  '$authorName · ${request.status.replaceAll('_', ' ')} · ${DateFormat.MMMd().format(request.createdAt)}',
-                                  style: Theme.of(context).textTheme.bodyMedium,
-                                ),
-                              ],
-                            ),
+        return ManuscriptCard(
+          innerBorder: true,
+          accentColor: Theme.of(context).colorScheme.primary,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              GestureDetector(
+                onDoubleTap: isRequester
+                    ? null
+                    : onDoubleTapPrayed ??
+                          () => ref
+                              .read(prayerRequestRepositoryProvider)
+                              .markPrayed(group.id, request.id),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              RubricText(
+                                group.name,
+                                color: Theme.of(context).colorScheme.tertiary,
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                request.title,
+                                style: Theme.of(context).textTheme.titleLarge,
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                '$authorName · ${request.status.replaceAll('_', ' ')} · ${DateFormat.MMMd().format(request.createdAt)}',
+                                style: Theme.of(context).textTheme.bodyMedium,
+                              ),
+                            ],
                           ),
-                          PopupMenuButton<String>(
-                            tooltip: 'Request actions',
-                            icon: const Icon(Icons.more_vert),
-                            onSelected: (value) async {
-                              if (value == 'update') {
-                                showModalBottomSheet<void>(
-                                  context: context,
-                                  isScrollControlled: true,
-                                  builder: (_) => RequestUpdateSheet(
-                                    group: group,
-                                    request: request,
-                                  ),
-                                );
-                              }
-                              if (value == 'remove') {
-                                if (isRequester) {
-                                  await ref
-                                      .read(prayerRequestRepositoryProvider)
-                                      .removeRequest(request.id);
-                                } else {
-                                  onRemoveRequest?.call();
-                                  if (onRemoveRequest == null &&
-                                      context.mounted) {
-                                    await _confirmRemoveRequest(
-                                      context,
-                                      ref,
-                                      request.id,
-                                    );
-                                  }
-                                }
-                              }
-                              if (value == 'answered') {
+                        ),
+                        PopupMenuButton<String>(
+                          tooltip: 'Request actions',
+                          icon: const Icon(Icons.more_vert),
+                          onSelected: (value) async {
+                            if (value == 'update') {
+                              showModalBottomSheet<void>(
+                                context: context,
+                                isScrollControlled: true,
+                                builder: (_) => RequestUpdateSheet(
+                                  group: group,
+                                  request: request,
+                                ),
+                              );
+                            }
+                            if (value == 'remove') {
+                              if (isRequester) {
                                 await ref
                                     .read(prayerRequestRepositoryProvider)
-                                    .setStatus(request.id, 'answered');
-                              }
-                              if (value == 'report') {
-                                if (onReportRequest != null) {
-                                  onReportRequest!.call();
-                                  return;
-                                }
-                                await ref
-                                    .read(prayerRequestRepositoryProvider)
-                                    .reportRequest(group.id, request.id);
-                                if (context.mounted) {
-                                  _showMessage(
+                                    .removeRequest(request.id);
+                              } else {
+                                onRemoveRequest?.call();
+                                if (onRemoveRequest == null &&
+                                    context.mounted) {
+                                  await _confirmRemoveRequest(
                                     context,
-                                    'This request was reported to Leaders.',
+                                    ref,
+                                    request.id,
                                   );
                                 }
                               }
-                            },
-                            itemBuilder: (context) => [
-                              if (isRequester)
-                                const PopupMenuItem(
-                                  value: 'update',
-                                  child: Text('Update'),
-                                ),
-                              if (isRequester || isLeader)
-                                const PopupMenuItem(
-                                  value: 'remove',
-                                  child: Text('Remove'),
-                                ),
-                              if (isRequester)
-                                const PopupMenuItem(
-                                  value: 'answered',
-                                  child: Text('Answered'),
-                                ),
-                              if (!isRequester)
-                                const PopupMenuItem(
-                                  value: 'report',
-                                  child: Text('Report'),
-                                ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      RichTextContentViewer(
-                        deltaJson: request.bodyDeltaJson.trim().isEmpty
-                            ? plainTextToRichTextDeltaJson(request.body)
-                            : request.bodyDeltaJson,
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-                JoiningPrayerText(
-                  prayedCount: activity.prayedCount,
-                  hasCurrentUserPrayed: activity.hasCurrentUserPrayed,
-                  isRequester: isRequester,
-                  onJoin: isRequester || activity.hasCurrentUserPrayed
-                      ? null
-                      : () async {
-                          final joinPrayer = onJoinPrayer;
-                          if (joinPrayer != null) {
-                            joinPrayer();
-                            return;
-                          }
-                          try {
-                            await ref
-                                .read(prayerRequestRepositoryProvider)
-                                .markPrayed(group.id, request.id);
-                          } on Exception {
-                            if (context.mounted) {
-                              _showMessage(
-                                context,
-                                'This could not be saved. Try again when you’re online.',
-                              );
                             }
-                          }
-                        },
+                            if (value == 'answered') {
+                              await ref
+                                  .read(prayerRequestRepositoryProvider)
+                                  .setStatus(request.id, 'answered');
+                            }
+                            if (value == 'report') {
+                              if (onReportRequest != null) {
+                                onReportRequest!.call();
+                                return;
+                              }
+                              await ref
+                                  .read(prayerRequestRepositoryProvider)
+                                  .reportRequest(group.id, request.id);
+                              if (context.mounted) {
+                                _showMessage(
+                                  context,
+                                  'This request was reported to Leaders.',
+                                );
+                              }
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            if (isRequester)
+                              const PopupMenuItem(
+                                value: 'update',
+                                child: Text('Update'),
+                              ),
+                            if (isRequester || isLeader)
+                              const PopupMenuItem(
+                                value: 'remove',
+                                child: Text('Remove'),
+                              ),
+                            if (isRequester)
+                              const PopupMenuItem(
+                                value: 'answered',
+                                child: Text('Answered'),
+                              ),
+                            if (!isRequester)
+                              const PopupMenuItem(
+                                value: 'report',
+                                child: Text('Report'),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const IlluminatedDivider(compact: true),
+                    RichTextContentViewer(
+                      deltaJson: request.bodyDeltaJson.trim().isEmpty
+                          ? plainTextToRichTextDeltaJson(request.body)
+                          : request.bodyDeltaJson,
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 12),
+              JoiningPrayerText(
+                prayedCount: activity.prayedCount,
+                hasCurrentUserPrayed: activity.hasCurrentUserPrayed,
+                isRequester: isRequester,
+                onJoin: isRequester || activity.hasCurrentUserPrayed
+                    ? null
+                    : () async {
+                        final joinPrayer = onJoinPrayer;
+                        if (joinPrayer != null) {
+                          joinPrayer();
+                          return;
+                        }
+                        try {
+                          await ref
+                              .read(prayerRequestRepositoryProvider)
+                              .markPrayed(group.id, request.id);
+                        } on Exception {
+                          if (context.mounted) {
+                            _showMessage(
+                              context,
+                              'This could not be saved. Try again when you’re online.',
+                            );
+                          }
+                        }
+                      },
+              ),
+            ],
           ),
         );
       },
@@ -2367,16 +2381,15 @@ class _RequestUpdateSheetState extends ConsumerState<RequestUpdateSheet> {
             busy: _busy,
           ),
           const SizedBox(height: 8),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(12),
-              child: RichTextContentEditor(
-                controller: _body,
-                focusNode: _bodyFocusNode,
-                scrollController: _bodyScrollController,
-                minHeight: 80,
-                maxHeight: 160,
-              ),
+          ManuscriptCard(
+            padding: const EdgeInsets.all(12),
+            innerBorder: true,
+            child: RichTextContentEditor(
+              controller: _body,
+              focusNode: _bodyFocusNode,
+              scrollController: _bodyScrollController,
+              minHeight: 80,
+              maxHeight: 160,
             ),
           ),
           const SizedBox(height: 12),
@@ -2444,27 +2457,26 @@ class GroupManagement extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Group care', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 12),
-            if (isLeader) ...[
-              Text(
-                'Join requests and reports are handled in Group Settings.',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            ] else ...[
-              Text(
-                'Group members and invitations are managed in Group Settings.',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            ],
+    return ManuscriptCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const RubricText('Care notes'),
+          const SizedBox(height: 6),
+          Text('Group care', style: Theme.of(context).textTheme.titleLarge),
+          const IlluminatedDivider(compact: true),
+          if (isLeader) ...[
+            Text(
+              'Join requests and reports are handled in Group Settings.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+          ] else ...[
+            Text(
+              'Group members and invitations are managed in Group Settings.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -2857,50 +2869,47 @@ class JoinRequestSettingsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+    return ManuscriptCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const RubricText('Leaders'),
+          const SizedBox(height: 6),
+          Text('Join requests', style: Theme.of(context).textTheme.titleLarge),
+          const IlluminatedDivider(compact: true),
+          if (requests.isEmpty)
             Text(
-              'Join requests',
-              style: Theme.of(context).textTheme.titleLarge,
+              'No one is waiting to join.',
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
-            if (requests.isEmpty)
-              Text(
-                'No one is waiting to join.',
-                style: Theme.of(context).textTheme.bodyMedium,
+          for (final request in requests)
+            ListTile(
+              title: ProfileNameText(
+                userId: request.requestedBy,
+                prefix: 'Request from ',
               ),
-            for (final request in requests)
-              ListTile(
-                title: ProfileNameText(
-                  userId: request.requestedBy,
-                  prefix: 'Request from ',
-                ),
-                subtitle: request.invitedBy == null
-                    ? const Text('Inviter unknown')
-                    : ProfileNameText(
-                        userId: request.invitedBy!,
-                        prefix: 'Invited by ',
-                      ),
-                trailing: Wrap(
-                  children: [
-                    IconButton(
-                      onPressed: () => onApprove(request),
-                      icon: const Icon(Icons.check),
-                      tooltip: 'Approve',
+              subtitle: request.invitedBy == null
+                  ? const Text('Inviter unknown')
+                  : ProfileNameText(
+                      userId: request.invitedBy!,
+                      prefix: 'Invited by ',
                     ),
-                    IconButton(
-                      onPressed: () => onReject(request),
-                      icon: const Icon(Icons.close),
-                      tooltip: 'Reject',
-                    ),
-                  ],
-                ),
+              trailing: Wrap(
+                children: [
+                  IconButton(
+                    onPressed: () => onApprove(request),
+                    icon: const Icon(Icons.check),
+                    tooltip: 'Approve',
+                  ),
+                  IconButton(
+                    onPressed: () => onReject(request),
+                    icon: const Icon(Icons.close),
+                    tooltip: 'Reject',
+                  ),
+                ],
               ),
-          ],
-        ),
+            ),
+        ],
       ),
     );
   }
@@ -2920,46 +2929,46 @@ class RequestReportSettingsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+    return ManuscriptCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const RubricText('Care review'),
+          const SizedBox(height: 6),
+          Text(
+            'Reported requests',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const IlluminatedDivider(compact: true),
+          if (reports.isEmpty)
             Text(
-              'Reported requests',
-              style: Theme.of(context).textTheme.titleLarge,
+              'No requests have been reported.',
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
-            if (reports.isEmpty)
-              Text(
-                'No requests have been reported.',
-                style: Theme.of(context).textTheme.bodyMedium,
+          for (final report in reports)
+            ListTile(
+              title: ProfileNameText(
+                userId: report.reportedBy,
+                prefix: 'Reported by ',
               ),
-            for (final report in reports)
-              ListTile(
-                title: ProfileNameText(
-                  userId: report.reportedBy,
-                  prefix: 'Reported by ',
-                ),
-                subtitle: Text(
-                  'Request reported ${DateFormat.MMMd().format(report.createdAt)}',
-                ),
-                trailing: Wrap(
-                  spacing: 8,
-                  children: [
-                    OutlinedButton(
-                      onPressed: () => onDismiss(report),
-                      child: const Text('Dismiss'),
-                    ),
-                    OutlinedButton(
-                      onPressed: () => onRemove(report),
-                      child: const Text('Remove request'),
-                    ),
-                  ],
-                ),
+              subtitle: Text(
+                'Request reported ${DateFormat.MMMd().format(report.createdAt)}',
               ),
-          ],
-        ),
+              trailing: Wrap(
+                spacing: 8,
+                children: [
+                  OutlinedButton(
+                    onPressed: () => onDismiss(report),
+                    child: const Text('Dismiss'),
+                  ),
+                  OutlinedButton(
+                    onPressed: () => onRemove(report),
+                    child: const Text('Remove request'),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -2973,37 +2982,31 @@ class MemberSettings extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final repository = ref.watch(groupRepositoryProvider);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: StreamBuilder<List<GroupMembership>>(
-          stream: repository.watchMembers(group.id),
-          builder: (context, snapshot) {
-            final members = snapshot.data ?? const <GroupMembership>[];
-            return MemberSettingsList(
-              group: group,
-              isLeader: true,
-              members: members,
-              joinRequests: const <JoinRequest>[],
-              onInvite: () => _createAndCopyInvite(context, repository, group),
-              onPromoteMember: (member) async {
-                await repository.proposeLeaderAddition(group.id, member.userId);
-                if (context.mounted) {
-                  _showMessage(
-                    context,
-                    'Promotion proposed for Leader review.',
-                  );
-                }
-              },
-              onRemoveMember: (member) async {
-                await repository.proposeMemberRemoval(group.id, member.userId);
-                if (context.mounted) {
-                  _showMessage(context, 'Removal proposed for Leader review.');
-                }
-              },
-            );
-          },
-        ),
+    return ManuscriptCard(
+      child: StreamBuilder<List<GroupMembership>>(
+        stream: repository.watchMembers(group.id),
+        builder: (context, snapshot) {
+          final members = snapshot.data ?? const <GroupMembership>[];
+          return MemberSettingsList(
+            group: group,
+            isLeader: true,
+            members: members,
+            joinRequests: const <JoinRequest>[],
+            onInvite: () => _createAndCopyInvite(context, repository, group),
+            onPromoteMember: (member) async {
+              await repository.proposeLeaderAddition(group.id, member.userId);
+              if (context.mounted) {
+                _showMessage(context, 'Promotion proposed for Leader review.');
+              }
+            },
+            onRemoveMember: (member) async {
+              await repository.proposeMemberRemoval(group.id, member.userId);
+              if (context.mounted) {
+                _showMessage(context, 'Removal proposed for Leader review.');
+              }
+            },
+          );
+        },
       ),
     );
   }
@@ -3035,20 +3038,17 @@ class MemberSettingsContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: MemberSettingsList(
-          group: group,
-          isLeader: isLeader,
-          members: members,
-          joinRequests: isLeader ? joinRequests : const <JoinRequest>[],
-          onInvite: onInvite,
-          onApproveJoinRequest: onApproveJoinRequest,
-          onRejectJoinRequest: onRejectJoinRequest,
-          onPromoteMember: isLeader ? onPromoteMember : null,
-          onRemoveMember: isLeader ? onRemoveMember : null,
-        ),
+    return ManuscriptCard(
+      child: MemberSettingsList(
+        group: group,
+        isLeader: isLeader,
+        members: members,
+        joinRequests: isLeader ? joinRequests : const <JoinRequest>[],
+        onInvite: onInvite,
+        onApproveJoinRequest: onApproveJoinRequest,
+        onRejectJoinRequest: onRejectJoinRequest,
+        onPromoteMember: isLeader ? onPromoteMember : null,
+        onRemoveMember: isLeader ? onRemoveMember : null,
       ),
     );
   }
@@ -3083,7 +3083,10 @@ class MemberSettingsList extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        const RubricText('Group book'),
+        const SizedBox(height: 6),
         Text('Members', style: Theme.of(context).textTheme.titleLarge),
+        const IlluminatedDivider(compact: true),
         for (final member in members)
           isLeader && member.role == 'member'
               ? MemberEntryMenu(
@@ -3178,46 +3181,46 @@ class SettingsChangeSettingsSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+    return ManuscriptCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const RubricText('Leader review'),
+          const SizedBox(height: 6),
+          Text(
+            'Pending changes',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
+          const IlluminatedDivider(compact: true),
+          if (docs.isEmpty)
             Text(
-              'Pending changes',
-              style: Theme.of(context).textTheme.titleLarge,
+              'No pending settings changes.',
+              style: Theme.of(context).textTheme.bodyMedium,
             ),
-            if (docs.isEmpty)
-              Text(
-                'No pending settings changes.',
-                style: Theme.of(context).textTheme.bodyMedium,
+          for (final doc in docs)
+            ListTile(
+              title: SettingsChangeTitle(data: doc.data()),
+              subtitle: const Text('Visible only to Leaders'),
+              trailing: Wrap(
+                children: [
+                  IconButton(
+                    onPressed: () => onApprove(doc.id),
+                    icon: const Icon(Icons.check),
+                    tooltip: 'Approve',
+                  ),
+                  IconButton(
+                    onPressed: () => onDispute(doc.id),
+                    icon: const Icon(Icons.block),
+                    tooltip: 'Dispute',
+                  ),
+                ],
               ),
-            for (final doc in docs)
-              ListTile(
-                title: SettingsChangeTitle(data: doc.data()),
-                subtitle: const Text('Visible only to Leaders'),
-                trailing: Wrap(
-                  children: [
-                    IconButton(
-                      onPressed: () => onApprove(doc.id),
-                      icon: const Icon(Icons.check),
-                      tooltip: 'Approve',
-                    ),
-                    IconButton(
-                      onPressed: () => onDispute(doc.id),
-                      icon: const Icon(Icons.block),
-                      tooltip: 'Dispute',
-                    ),
-                  ],
-                ),
-              ),
-            OutlinedButton(
-              onPressed: onApplyReadyChanges,
-              child: const Text('Apply ready changes'),
             ),
-          ],
-        ),
+          OutlinedButton(
+            onPressed: onApplyReadyChanges,
+            child: const Text('Apply ready changes'),
+          ),
+        ],
       ),
     );
   }
@@ -3433,8 +3436,10 @@ class ProfileRequestList extends StatelessWidget {
     return Column(
       children: [
         for (final request in requests)
-          Card(
+          ManuscriptCard(
+            padding: const EdgeInsets.all(8),
             child: ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12),
               title: Text(request.title),
               subtitle: Text(
                 '${request.status.replaceAll('_', ' ')} · ${DateFormat.MMMd().format(request.createdAt)}',
@@ -3451,23 +3456,21 @@ class PrivacyNote extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Icon(
-              Icons.lock_outline,
-              color: Theme.of(context).colorScheme.primary,
+    return ManuscriptCard(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Icon(
+            Icons.lock_outline,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Text(
+              'End-to-end encrypted. Vesper cannot read prayer contents.',
             ),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Text(
-                'End-to-end encrypted. Vesper cannot read prayer contents.',
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -3480,8 +3483,14 @@ class EmptyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(padding: const EdgeInsets.all(20), child: Text(text)),
+    return ManuscriptCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const IlluminatedDivider(compact: true),
+          Text(text, style: Theme.of(context).textTheme.bodyMedium),
+        ],
+      ),
     );
   }
 }

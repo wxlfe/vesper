@@ -313,6 +313,17 @@ void main() {
     ),
   ];
 
+  test('app theme uses manuscript palette and serif typography', () {
+    final theme = AppTheme.light;
+
+    expect(theme.scaffoldBackgroundColor, const Color(0xfffbf3df));
+    expect(theme.colorScheme.surface, const Color(0xfffffaf0));
+    expect(theme.colorScheme.primary, const Color(0xff208070));
+    expect(theme.colorScheme.tertiary, const Color(0xff583070));
+    expect(theme.textTheme.bodyLarge?.fontFamily, 'Georgia');
+    expect(theme.dividerColor, const Color(0xffdfcfab));
+  });
+
   testWidgets(
     'home lands on Pray with centered request action and Groups tab',
     (tester) async {
@@ -912,6 +923,7 @@ void main() {
 
     expect(find.text('Opening'), findsOneWidget);
     expect(find.byType(RoutineSectionContentCard), findsOneWidget);
+    expect(find.text('Prayer text'), findsNothing);
     expect(
       find.descendant(
         of: find.byType(RoutineSectionContentCard),
@@ -1554,7 +1566,7 @@ void main() {
             body: RequestCard(
               group: const VesperGroup(
                 id: 'group-1',
-                name: 'Group',
+                name: 'Morning Group',
                 description: '',
                 createdBy: 'leader-1',
                 activeKeyVersion: 1,
@@ -1579,6 +1591,8 @@ void main() {
 
     expect(find.textContaining('Sarah Chen'), findsOneWidget);
     expect(find.textContaining('user-1'), findsNothing);
+    expect(find.text('MORNING GROUP'), findsOneWidget);
+    expect(find.text('PRIVATE TO MORNING GROUP'), findsNothing);
   });
 
   testWidgets('request card renders rich text request body', (tester) async {
@@ -2623,6 +2637,39 @@ void main() {
 
     expect(find.byIcon(Icons.group_add_outlined), findsOneWidget);
     expect(find.text('Group'), findsNothing);
+  });
+
+  testWidgets('group detail floating action button is icon only', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          groupRepositoryProvider.overrideWithValue(
+            const _FakeGroupRepository(testGroups),
+          ),
+          authRepositoryProvider.overrideWithValue(const _FakeAuthRepository()),
+          prayerRequestRepositoryProvider.overrideWithValue(
+            const _FakePrayerRequestRepository(),
+          ),
+          prayerSessionRepositoryProvider.overrideWithValue(
+            const _FakePrayerSessionRepository(),
+          ),
+        ],
+        child: MaterialApp(home: GroupDetailScreen(group: testGroups.first)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(FloatingActionButton), findsOneWidget);
+    expect(find.byTooltip('Submit prayer request'), findsOneWidget);
+    expect(find.byIcon(Icons.add), findsOneWidget);
+    expect(find.text('New Request'), findsNothing);
+
+    await tester.tap(find.byTooltip('Submit prayer request'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Share a Prayer Request'), findsOneWidget);
   });
 
   testWidgets('home header uses title graphic', (tester) async {
