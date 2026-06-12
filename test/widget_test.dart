@@ -1,13 +1,23 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vesper/app.dart';
+import 'package:vesper/core/crypto/encryption_service.dart';
+import 'package:vesper/core/crypto/group_key_service.dart';
 import 'package:vesper/core/models/app_models.dart';
 import 'package:vesper/core/services/app_providers.dart';
 import 'package:vesper/core/theme/app_theme.dart';
+import 'package:vesper/core/theme/theme_preference.dart';
+import 'package:vesper/core/widgets/manuscript_widgets.dart';
 import 'package:vesper/features/auth/data/auth_repository.dart';
 import 'package:vesper/features/groups/data/group_repository.dart';
 import 'package:vesper/features/prayer/data/prayer_session_repository.dart';
@@ -58,13 +68,20 @@ class _FakeAuthRepository implements AuthRepository {
 }
 
 class _FakeGroupRepository implements GroupRepository {
-  const _FakeGroupRepository(this.groups, {this.watchMyGroupsError});
+  const _FakeGroupRepository(
+    this.groups, {
+    this.watchMyGroupsError,
+    this.watchMyGroupsStream,
+  });
 
   final List<VesperGroup> groups;
   final Object? watchMyGroupsError;
+  final Stream<List<VesperGroup>>? watchMyGroupsStream;
 
   @override
   Stream<List<VesperGroup>> watchMyGroups() {
+    final stream = watchMyGroupsStream;
+    if (stream != null) return stream;
     final error = watchMyGroupsError;
     if (error != null) return Stream.error(error);
     return Stream.value(groups);
@@ -152,13 +169,25 @@ class _FakePrayerRequestRepository implements PrayerRequestRepository {
   const _FakePrayerRequestRepository({
     this.requests = const [],
     this.watchRequestsError,
+    this.watchMyRequestsError,
+    this.watchRequestsStream,
+    this.watchMyRequestsStream,
+    this.privateCreatedTitles,
+    this.reportedGroupIds,
   });
 
   final List<PrayerRequestSummary> requests;
   final Object? watchRequestsError;
+  final Object? watchMyRequestsError;
+  final Stream<List<PrayerRequestSummary>>? watchRequestsStream;
+  final Stream<List<PrayerRequestSummary>>? watchMyRequestsStream;
+  final List<String>? privateCreatedTitles;
+  final List<String>? reportedGroupIds;
 
   @override
   Stream<List<PrayerRequestSummary>> watchRequests(VesperGroup group) {
+    final stream = watchRequestsStream;
+    if (stream != null) return stream;
     final error = watchRequestsError;
     if (error != null) return Stream.error(error);
     return Stream.value(
@@ -178,6 +207,38 @@ class _FakePrayerRequestRepository implements PrayerRequestRepository {
     required String body,
     String? bodyDeltaJson,
   }) async {}
+
+  @override
+  Future<void> createPrivateRequest({
+    required String title,
+    required String body,
+    String? bodyDeltaJson,
+  }) async {
+    privateCreatedTitles?.add(title);
+  }
+
+  @override
+  Future<void> createRequestForGroups({
+    required List<VesperGroup> groups,
+    required String title,
+    required String body,
+    String? bodyDeltaJson,
+  }) async {}
+
+  @override
+  Future<void> backfillRequestGrantsForMember({
+    required VesperGroup group,
+    required String memberUserId,
+  }) async {}
+
+  @override
+  Stream<List<PrayerRequestSummary>> watchMyRequests() {
+    final stream = watchMyRequestsStream;
+    if (stream != null) return stream;
+    final error = watchMyRequestsError;
+    if (error != null) return Stream.error(error);
+    return Stream.value(requests);
+  }
 
   @override
   Future<void> updateRequest({
@@ -202,7 +263,27 @@ class _FakePrayerRequestRepository implements PrayerRequestRepository {
       Stream.value(const {});
 
   @override
-  Future<void> reportRequest(String groupId, String requestId) async {}
+  Stream<Map<String, PrayerActivity>> watchPrayerActivityForRequests(
+    Iterable<String> requestIds,
+  ) => Stream.value(const {});
+
+  @override
+  Stream<Map<String, PrayerActivity>> watchLegacyPrayerActivity(
+    String groupId,
+  ) => Stream.value(const {});
+
+  @override
+  Future<void> reportRequest(String groupId, String requestId) async {
+    reportedGroupIds?.add(groupId);
+  }
+
+  @override
+  Future<void> reportRequestForGroups(
+    Iterable<VesperGroup> groups,
+    String requestId,
+  ) async {
+    reportedGroupIds?.addAll(groups.map((group) => group.id));
+  }
 
   @override
   Stream<List<RequestReport>> watchRequestReports(String groupId) =>
@@ -295,6 +376,42 @@ class _FakePrayerSessionRepository implements PrayerSessionRepository {
   }
 }
 
+bool _pngHasAlpha(Uint8List bytes) {
+  const pngSignatureLength = 8;
+  const chunkLengthSize = 4;
+  const chunkTypeSize = 4;
+  const ihdrColorTypeOffset = 9;
+
+  final ihdrStart = pngSignatureLength + chunkLengthSize + chunkTypeSize;
+  final colorType = bytes[ihdrStart + ihdrColorTypeOffset];
+
+  return colorType == 4 || colorType == 6;
+}
+
+Uint8List _embeddedSvgPng(String svg) {
+  final match = RegExp(
+    r'href="data:image/png;base64,([^\"]+)"',
+  ).firstMatch(svg);
+
+  if (match == null) {
+    throw StateError('No embedded PNG found in title graphic SVG.');
+  }
+
+  return base64Decode(match.group(1)!);
+}
+
+double _contrastRatio(Color foreground, Color background) {
+  final foregroundLuminance = foreground.computeLuminance();
+  final backgroundLuminance = background.computeLuminance();
+  final lighter = foregroundLuminance > backgroundLuminance
+      ? foregroundLuminance
+      : backgroundLuminance;
+  final darker = foregroundLuminance > backgroundLuminance
+      ? backgroundLuminance
+      : foregroundLuminance;
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
 void main() {
   const testGroups = [
     VesperGroup(
@@ -312,6 +429,31 @@ void main() {
       activeKeyVersion: 1,
     ),
   ];
+
+  PrayerRequestSummary requestSummary({
+    required String id,
+    required String groupId,
+    required String title,
+    String createdBy = 'user-2',
+  }) {
+    return PrayerRequestSummary(
+      id: id,
+      groupId: groupId,
+      createdBy: createdBy,
+      status: 'active',
+      createdAt: DateTime.utc(2026, 5, 18),
+      title: title,
+      body: 'Private request body',
+    );
+  }
+
+  test('title graphic assets include alpha transparency', () {
+    final pngBytes = File('assets/title-graphic.png').readAsBytesSync();
+    final svg = File('assets/title-graphic.svg').readAsStringSync();
+
+    expect(_pngHasAlpha(pngBytes), isTrue);
+    expect(_pngHasAlpha(_embeddedSvgPng(svg)), isTrue);
+  });
 
   test('app theme uses manuscript palette and serif typography', () {
     final theme = AppTheme.light;
@@ -379,6 +521,225 @@ void main() {
       expect(find.text('Morning Group'), findsOneWidget);
     },
   );
+
+  testWidgets('consolidated request feed dedupes requests by id', (
+    tester,
+  ) async {
+    final reportedGroupIds = <String>[];
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(const _FakeAuthRepository()),
+          prayerRequestRepositoryProvider.overrideWithValue(
+            _FakePrayerRequestRepository(
+              requests: [
+                requestSummary(
+                  id: 'request-1',
+                  groupId: 'group-1',
+                  title: 'Shared request',
+                ),
+                requestSummary(
+                  id: 'request-1',
+                  groupId: 'group-2',
+                  title: 'Shared request',
+                ),
+              ],
+              reportedGroupIds: reportedGroupIds,
+            ),
+          ),
+          userProfileRepositoryProvider.overrideWithValue(
+            const _FakeUserProfileRepository({'user-2': 'Sarah Chen'}),
+          ),
+        ],
+        child: MaterialApp(
+          home: Scaffold(body: ConsolidatedRequestFeed(groups: testGroups)),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Shared request'), findsOneWidget);
+    expect(find.text('MORNING GROUP · EVENING GROUP'), findsOneWidget);
+
+    final menu = tester.widget<PopupMenuButton<String>>(
+      find.byType(PopupMenuButton<String>),
+    );
+    menu.onSelected?.call('report');
+    await tester.pumpAndSettle();
+
+    expect(reportedGroupIds, ['group-1', 'group-2']);
+  });
+
+  testWidgets(
+    'ConsolidatedRequestFeed shows loading before first request response',
+    (tester) async {
+      final controller = StreamController<List<PrayerRequestSummary>>();
+      addTearDown(controller.close);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(
+              const _FakeAuthRepository(),
+            ),
+            prayerRequestRepositoryProvider.overrideWithValue(
+              _FakePrayerRequestRepository(
+                watchRequestsStream: controller.stream,
+              ),
+            ),
+          ],
+          child: MaterialApp(
+            home: Scaffold(
+              body: ConsolidatedRequestFeed(groups: [testGroups.first]),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.text('No requests yet.'), findsNothing);
+
+      controller.add(const []);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.text('No requests yet.'), findsOneWidget);
+    },
+  );
+
+  test('request report ids are scoped by request group and reporter', () {
+    expect(
+      requestReportId(
+        requestId: 'request-1',
+        groupId: 'group-1',
+        userId: 'user-2',
+      ),
+      'request-1_group-1_user-2',
+    );
+  });
+
+  testWidgets('manuscript card provides a material surface for list tiles', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ManuscriptCard(
+            child: ListTile(title: const Text('Quiet group'), onTap: () {}),
+          ),
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('manuscript card borders use routine section border color', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: const Scaffold(
+          body: ManuscriptCard(innerBorder: true, child: Text('Quiet card')),
+        ),
+      ),
+    );
+
+    final expectedBorderColor = AppTheme.light.colorScheme.secondary.withValues(
+      alpha: 0.45,
+    );
+    final decorations = tester
+        .widgetList<DecoratedBox>(find.byType(DecoratedBox))
+        .map((widget) => widget.decoration)
+        .whereType<BoxDecoration>()
+        .toList();
+
+    expect(decorations[0].border?.top.color, expectedBorderColor);
+    expect(decorations[1].border?.top.color, expectedBorderColor);
+  });
+
+  testWidgets('rubric text adds background for low contrast accent', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightForPreference(
+          const ThemePreference.custom(Colors.white),
+        ),
+        home: const Scaffold(body: RubricText('Low contrast')),
+      ),
+    );
+
+    expect(find.text('LOW CONTRAST'), findsOneWidget);
+    expect(
+      find.byKey(const Key('rubric-text-readable-background')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('rubric text skips background for readable accent', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: const Scaffold(body: RubricText('Readable')),
+      ),
+    );
+
+    expect(find.text('READABLE'), findsOneWidget);
+    expect(
+      find.byKey(const Key('rubric-text-readable-background')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('groups tab separates group cards vertically', (tester) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          groupRepositoryProvider.overrideWithValue(
+            const _FakeGroupRepository(testGroups),
+          ),
+          authRepositoryProvider.overrideWithValue(const _FakeAuthRepository()),
+          prayerRequestRepositoryProvider.overrideWithValue(
+            const _FakePrayerRequestRepository(),
+          ),
+          prayerSessionRepositoryProvider.overrideWithValue(
+            const _FakePrayerSessionRepository(),
+          ),
+        ],
+        child: const MaterialApp(home: HomeScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Groups'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(GroupCardListItem), findsNWidgets(2));
+
+    final spacedItem = find.descendant(
+      of: find.byType(GroupCardListItem).first,
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is Padding &&
+            widget.padding == const EdgeInsets.only(bottom: 12),
+      ),
+    );
+
+    expect(spacedItem, findsOneWidget);
+
+    final groupCard = tester.widget<ManuscriptCard>(
+      find.descendant(
+        of: find.byType(GroupCardListItem).first,
+        matching: find.byType(ManuscriptCard),
+      ),
+    );
+
+    expect(groupCard.innerBorder, isTrue);
+  });
 
   testWidgets(
     'center request action opens multi-group composer with select all',
@@ -507,11 +868,18 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Create or join group'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(ElevatedButton),
+        matching: find.text('Create or join group'),
+      ),
+      findsOneWidget,
+    );
 
     await tester.tap(find.text('Create or join group'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Create a group'), findsOneWidget);
+    expect(find.text('Create a Group'), findsOneWidget);
     expect(find.text('Request to join'), findsOneWidget);
   });
 
@@ -739,11 +1107,43 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(
-      find.text('We could not load requests for Morning Group.'),
-      findsOneWidget,
-    );
+    expect(find.text('We could not load requests.'), findsOneWidget);
     expect(find.text('No requests yet.'), findsNothing);
+  });
+
+  testWidgets('RequestList shows loading before first group request response', (
+    tester,
+  ) async {
+    final controller = StreamController<List<PrayerRequestSummary>>();
+    addTearDown(controller.close);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(const _FakeAuthRepository()),
+          prayerRequestRepositoryProvider.overrideWithValue(
+            _FakePrayerRequestRepository(watchRequestsStream: controller.stream),
+          ),
+          userProfileRepositoryProvider.overrideWithValue(
+            const _FakeUserProfileRepository({}),
+          ),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: RequestList(group: testGroups.first, isLeader: false),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('No requests yet.'), findsNothing);
+
+    controller.add(const []);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.text('No requests yet.'), findsOneWidget);
   });
 
   testWidgets('routine row opens selected routine reader', (tester) async {
@@ -941,6 +1341,53 @@ void main() {
     );
   });
 
+  testWidgets('Routine request section shows loading before groups response', (
+    tester,
+  ) async {
+    final controller = StreamController<List<VesperGroup>>();
+    addTearDown(controller.close);
+
+    const section = RoutineSection(
+      id: 'section-requests',
+      sessionId: 'session-1',
+      userId: 'user-1',
+      type: RoutineSectionType.requestFeed,
+      sortOrder: 1000,
+      status: 'active',
+      title: 'Prayer requests',
+      contentDeltaJson: '',
+    );
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          groupRepositoryProvider.overrideWithValue(
+            _FakeGroupRepository(
+              const [],
+              watchMyGroupsStream: controller.stream,
+            ),
+          ),
+          authRepositoryProvider.overrideWithValue(const _FakeAuthRepository()),
+          prayerRequestRepositoryProvider.overrideWithValue(
+            const _FakePrayerRequestRepository(),
+          ),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(body: RoutineSectionBody(section: section)),
+        ),
+      ),
+    );
+
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.text('No requests are ready here yet.'), findsNothing);
+
+    controller.add(const []);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.text('No requests are ready here yet.'), findsOneWidget);
+  });
+
   test('routine format buttons return unset attributes when active', () {
     final controller = routineQuillControllerFromDeltaJson(
       plainTextToRoutineDeltaJson('Amen'),
@@ -1074,10 +1521,28 @@ void main() {
     expect(find.widgetWithText(TextField, 'Section title'), findsNothing);
     expect(find.byTooltip('Edit Opening'), findsOneWidget);
 
+    final sectionCard = tester.widget<ManuscriptCard>(
+      find.ancestor(
+        of: find.text('Opening'),
+        matching: find.byType(ManuscriptCard),
+      ),
+    );
+    final sectionSpacing = find.ancestor(
+      of: find.text('Opening'),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is Padding &&
+            widget.padding == const EdgeInsets.only(bottom: 12),
+      ),
+    );
+
+    expect(sectionCard.innerBorder, isTrue);
+    expect(sectionSpacing, findsOneWidget);
+
     await tester.tap(find.byTooltip('Edit Opening'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Edit section'), findsOneWidget);
+    expect(find.text('Edit Section'), findsOneWidget);
     expect(find.widgetWithText(TextField, 'Section title'), findsOneWidget);
     expect(find.byTooltip('Remove Opening'), findsOneWidget);
 
@@ -1163,7 +1628,7 @@ void main() {
     await tester.tap(find.byTooltip('Edit Opening'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Edit section'), findsOneWidget);
+    expect(find.text('Edit Section'), findsOneWidget);
     expect(find.widgetWithText(TextField, 'Section title'), findsOneWidget);
     expect(find.text('Save section'), findsOneWidget);
     expect(find.text('Remove'), findsOneWidget);
@@ -1329,7 +1794,7 @@ void main() {
     expect(find.text('Prayer'), findsNothing);
     expect(find.text('Silence'), findsNothing);
     expect(find.text('Reading'), findsNothing);
-    expect(find.text('Request feed'), findsOneWidget);
+    expect(find.text('Request Feed'), findsOneWidget);
 
     await tester.tap(find.text('Section'));
     await tester.pumpAndSettle();
@@ -1506,6 +1971,32 @@ void main() {
     expect(find.text('Share a Prayer Request'), findsNothing);
   });
 
+  testWidgets('prayer composer can save a private request without groups', (
+    tester,
+  ) async {
+    final privateTitles = <String>[];
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          prayerRequestRepositoryProvider.overrideWithValue(
+            _FakePrayerRequestRepository(privateCreatedTitles: privateTitles),
+          ),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(body: PrayerComposerSheet(groups: [])),
+        ),
+      ),
+    );
+
+    await tester.enterText(find.widgetWithText(TextField, 'Title'), 'Private');
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Request Prayer'));
+    await tester.pumpAndSettle();
+
+    expect(privateTitles, ['Private']);
+  });
+
   testWidgets('invite modal shows QR code text and copy action', (
     tester,
   ) async {
@@ -1593,6 +2084,51 @@ void main() {
     expect(find.textContaining('user-1'), findsNothing);
     expect(find.text('MORNING GROUP'), findsOneWidget);
     expect(find.text('PRIVATE TO MORNING GROUP'), findsNothing);
+  });
+
+  testWidgets('request card group label uses theme accent', (tester) async {
+    const customAccent = Color(0xff336699);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          userProfileRepositoryProvider.overrideWithValue(
+            const _FakeUserProfileRepository({'user-1': 'Sarah Chen'}),
+          ),
+        ],
+        child: MaterialApp(
+          theme: AppTheme.lightForPreference(
+            const ThemePreference.custom(customAccent),
+          ),
+          home: Scaffold(
+            body: RequestCard(
+              group: const VesperGroup(
+                id: 'group-1',
+                name: 'Morning Group',
+                description: '',
+                createdBy: 'leader-1',
+                activeKeyVersion: 1,
+              ),
+              request: PrayerRequestSummary(
+                id: 'request-1',
+                groupId: 'group-1',
+                createdBy: 'user-1',
+                status: 'active',
+                createdAt: DateTime.utc(2026, 5, 18),
+                title: 'Please pray',
+                body: 'Private request body',
+              ),
+              isLeader: false,
+              currentUserId: 'someone-else',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final groupLabel = tester.widget<Text>(find.text('MORNING GROUP'));
+    expect(groupLabel.style?.color, customAccent);
   });
 
   testWidgets('request card renders rich text request body', (tester) async {
@@ -1757,7 +2293,7 @@ void main() {
 
   test('request reports store metadata without plaintext content', () {
     final report = RequestReport(
-      id: 'request-1_user-2',
+      id: 'request-1_group-1_user-2',
       groupId: 'group-1',
       requestId: 'request-1',
       reportedBy: 'user-2',
@@ -1838,6 +2374,122 @@ void main() {
     expect(activity['request-1']?.prayedCount, 2);
     expect(activity['request-1']?.hasCurrentUserPrayed, isTrue);
     expect(activity.containsKey('request-2'), isFalse);
+  });
+
+  test('request share and grant ids are stable and scoped', () {
+    expect(requestShareId('request-1', 'group-1'), 'request-1_group-1');
+    expect(requestKeyGrantId('request-1', 'user-1'), 'request-1_user-1');
+  });
+
+  test('canonical request firestore data omits plaintext request content', () {
+    final data = canonicalPrayerRequestData(
+      createdBy: 'user-1',
+      payload: const EncryptedPayload(
+        ciphertext: 'ciphertext-base64',
+        nonce: 'nonce-base64',
+        keyVersion: 1,
+        payloadVersion: 3,
+        algorithm: 'xchacha20-poly1305',
+      ),
+    );
+
+    expect(data['createdBy'], 'user-1');
+    expect(data['status'], 'active');
+    expect(data.values.whereType<String>(), isNot(contains('Please pray')));
+    expect(
+      data.values.whereType<String>(),
+      isNot(contains('Private request body')),
+    );
+    expect(data.keys, isNot(contains('title')));
+    expect(data.keys, isNot(contains('body')));
+    expect(data.keys, isNot(contains('groupId')));
+  });
+
+  test('request share firestore data is metadata only', () {
+    final data = requestShareData(
+      requestId: 'request-1',
+      groupId: 'group-1',
+      sharedBy: 'user-1',
+    );
+
+    expect(data['requestId'], 'request-1');
+    expect(data['groupId'], 'group-1');
+    expect(data['status'], 'active');
+    expect(
+      data.values.whereType<String>(),
+      isNot(contains('Private request body')),
+    );
+    expect(data.keys, isNot(contains('ciphertext')));
+  });
+
+  test('request key grant firestore data wraps key metadata only', () {
+    final data = requestKeyGrantData(
+      requestId: 'request-1',
+      userId: 'new-member',
+      grantedBy: 'leader-1',
+      grantedViaGroupId: 'group-1',
+      wrappedKey: const WrappedGroupKey(
+        encryptedGroupKey: 'wrapped-key',
+        nonce: 'nonce',
+        ephemeralPublicKey: 'ephemeral-public-key',
+        algorithm: 'x25519-xchacha20-poly1305',
+      ),
+    );
+
+    expect(data['requestId'], 'request-1');
+    expect(data['userId'], 'new-member');
+    expect(data['grantedBy'], 'leader-1');
+    expect(data['grantedViaGroupId'], 'group-1');
+    expect(data['encryptedGroupKey'], 'wrapped-key');
+    expect(data.keys, isNot(contains('title')));
+    expect(data.keys, isNot(contains('body')));
+  });
+
+  test('request key loading queries grants by request and user', () {
+    final repositorySource = File(
+      'lib/features/requests/data/prayer_request_repository.dart',
+    ).readAsStringSync();
+
+    expect(repositorySource, contains(".collection('request_key_grants')"));
+    expect(
+      repositorySource,
+      contains(".where('requestId', isEqualTo: requestId)"),
+    );
+    expect(repositorySource, contains(".where('userId', isEqualTo: _uid)"));
+    expect(repositorySource, contains('.limit(1)'));
+    expect(
+      repositorySource,
+      isNot(contains('.doc(requestKeyGrantId(requestId, _uid))')),
+    );
+  });
+
+  test('firestore rules validate batched request share creation post-commit', () {
+    final rules = File('firestore.rules').readAsStringSync();
+
+    expect(
+      rules,
+      contains(
+        r'existsAfter(/databases/$(database)/documents/prayer_requests/$(request.resource.data.requestId))',
+      ),
+    );
+    expect(
+      rules,
+      contains(
+        r'getAfter(/databases/$(database)/documents/prayer_requests/$(request.resource.data.requestId)).data.createdBy == request.auth.uid',
+      ),
+    );
+    expect(
+      rules,
+      contains(
+        'existsAfter(requestSharePath(request.resource.data.requestId, request.resource.data.grantedViaGroupId))',
+      ),
+    );
+    expect(
+      rules,
+      contains(
+        "getAfter(requestSharePath(request.resource.data.requestId, request.resource.data.grantedViaGroupId)).data.status == 'active'",
+      ),
+    );
   });
 
   testWidgets('request list shows all requests newest first while scrolling', (
@@ -2275,7 +2927,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Join requests'), findsOneWidget);
+    expect(find.text('Join Requests'), findsOneWidget);
     expect(find.textContaining('Sarah Chen'), findsOneWidget);
     expect(find.textContaining('Alex Rivera'), findsOneWidget);
   });
@@ -2314,7 +2966,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Reported requests'), findsOneWidget);
+    expect(find.text('Reported Requests'), findsOneWidget);
     expect(find.textContaining('Jordan Lee'), findsOneWidget);
 
     await tester.tap(find.text('Dismiss'));
@@ -2378,9 +3030,9 @@ void main() {
     expect(find.text('Members'), findsOneWidget);
     expect(find.textContaining('Sarah Chen'), findsOneWidget);
     expect(find.text('Invite a New Member'), findsOneWidget);
-    expect(find.text('Join requests'), findsNothing);
-    expect(find.text('Reported requests'), findsNothing);
-    expect(find.text('Pending changes'), findsNothing);
+    expect(find.text('Join Requests'), findsNothing);
+    expect(find.text('Reported Requests'), findsNothing);
+    expect(find.text('Pending Changes'), findsNothing);
     expect(find.text('Inviter unknown'), findsNothing);
   });
 
@@ -2450,16 +3102,16 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Join requests'), findsNothing);
+    expect(find.text('Join Requests'), findsNothing);
     expect(find.textContaining('Sarah Chen'), findsOneWidget);
     expect(find.textContaining('Jordan Lee'), findsNWidgets(2));
     expect(find.textContaining('Alex Rivera'), findsOneWidget);
     expect(find.text('Invite a New Member'), findsOneWidget);
-    expect(find.text('Reported requests'), findsOneWidget);
+    expect(find.text('Reported Requests'), findsOneWidget);
 
     final membersTop = tester.getTopLeft(find.text('Members')).dy;
     final inviteTop = tester.getTopLeft(find.text('Invite a New Member')).dy;
-    final reportsTop = tester.getTopLeft(find.text('Reported requests')).dy;
+    final reportsTop = tester.getTopLeft(find.text('Reported Requests')).dy;
     expect(membersTop, lessThan(inviteTop));
     expect(inviteTop, lessThan(reportsTop));
   });
@@ -2598,14 +3250,30 @@ void main() {
     expect(find.text('Remove'), findsOneWidget);
   });
 
-  testWidgets('profile screen manages name and exposes requests and logout', (
+  testWidgets('profile screen edits name and reuses request cards', (
     tester,
   ) async {
+    var savedName = '';
     await tester.pumpWidget(
       ProviderScope(
+        overrides: [
+          userProfileRepositoryProvider.overrideWithValue(
+            const _FakeUserProfileRepository({'user-1': 'Sarah Chen'}),
+          ),
+        ],
         child: MaterialApp(
           home: ProfileScreen(
             initialDisplayName: 'Sarah Chen',
+            onSaveName: (name) async => savedName = name,
+            requestGroups: const {
+              'group-1': VesperGroup(
+                id: 'group-1',
+                name: 'Morning Group',
+                description: '',
+                createdBy: 'leader-1',
+                activeKeyVersion: 1,
+              ),
+            },
             requests: [
               PrayerRequestSummary(
                 id: 'request-1',
@@ -2621,11 +3289,102 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Your profile'), findsNothing);
+    expect(find.text('Sarah Chen'), findsWidgets);
+    expect(find.widgetWithText(TextField, 'Name'), findsNothing);
+    expect(find.text('Your Prayer Requests'), findsOneWidget);
+    expect(find.text('Please pray'), findsOneWidget);
+    expect(find.widgetWithText(ElevatedButton, 'Log Out'), findsOneWidget);
+    expect(find.byTooltip('Request actions'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Edit name'));
+    await tester.pumpAndSettle();
 
     expect(find.widgetWithText(TextField, 'Name'), findsOneWidget);
-    expect(find.text('Your prayer requests'), findsOneWidget);
-    expect(find.text('Please pray'), findsOneWidget);
-    expect(find.text('Log out'), findsOneWidget);
+    await tester.enterText(find.widgetWithText(TextField, 'Name'), 'Sarah C.');
+    await tester.tap(find.widgetWithText(ElevatedButton, 'Save name'));
+    await tester.pumpAndSettle();
+
+    expect(savedName, 'Sarah C.');
+    expect(find.widgetWithText(TextField, 'Name'), findsNothing);
+    expect(find.text('Sarah C.'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Request actions'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Update'), findsOneWidget);
+    expect(find.text('Remove'), findsOneWidget);
+    expect(find.text('Answered'), findsOneWidget);
+  });
+
+  testWidgets('profile request feed shows load errors distinctly', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(const _FakeAuthRepository()),
+          prayerRequestRepositoryProvider.overrideWithValue(
+            _FakePrayerRequestRepository(
+              watchMyRequestsError: StateError('missing request grant'),
+            ),
+          ),
+        ],
+        child: const MaterialApp(
+          home: Scaffold(body: MyPrayerRequestsForUser(userId: 'user-1')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('We could not load your requests.'), findsOneWidget);
+    expect(find.text('Your requests will appear here.'), findsNothing);
+  });
+
+  testWidgets(
+    'MyPrayerRequestsForUser shows loading before first profile request response',
+    (tester) async {
+      final controller = StreamController<List<PrayerRequestSummary>>();
+      addTearDown(controller.close);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authRepositoryProvider.overrideWithValue(
+              const _FakeAuthRepository(),
+            ),
+            prayerRequestRepositoryProvider.overrideWithValue(
+              _FakePrayerRequestRepository(
+                watchMyRequestsStream: controller.stream,
+              ),
+            ),
+          ],
+          child: const MaterialApp(
+            home: Scaffold(body: MyPrayerRequestsForUser(userId: 'user-1')),
+          ),
+        ),
+      );
+
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.text('Your requests will appear here.'), findsNothing);
+
+      controller.add(const []);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.text('Your requests will appear here.'), findsOneWidget);
+    },
+  );
+
+  test('profile request feed statuses include non-deleted owned requests', () {
+    expect(profileRequestStatuses(), [
+      'active',
+      'answered',
+      'resolved',
+      'archived',
+    ]);
   });
 
   testWidgets('home floating action button is icon only', (tester) async {
@@ -2637,6 +3396,159 @@ void main() {
 
     expect(find.byIcon(Icons.group_add_outlined), findsOneWidget);
     expect(find.text('Group'), findsNothing);
+  });
+
+  testWidgets('home group fab uses chosen theme color background', (
+    tester,
+  ) async {
+    const customAccent = Color(0xfffefefe);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightForPreference(
+          const ThemePreference.custom(customAccent),
+        ),
+        home: const Scaffold(
+          floatingActionButton: HomeGroupFab(onPressed: null),
+        ),
+      ),
+    );
+
+    final fab = tester.widget<FloatingActionButton>(
+      find.byType(FloatingActionButton),
+    );
+    expect(fab.backgroundColor, customAccent);
+  });
+
+  testWidgets('home bottom bar changes background for low contrast accent', (
+    tester,
+  ) async {
+    final theme = AppTheme.lightForPreference(
+      const ThemePreference.custom(Colors.white),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: theme,
+        home: Scaffold(
+          bottomNavigationBar: HomeBottomNavigationBar(
+            selectedIndex: 0,
+            onSelect: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Pray'), findsOneWidget);
+    expect(find.text('Groups'), findsOneWidget);
+    final bottomAppBar = tester.widget<BottomAppBar>(find.byType(BottomAppBar));
+    final barColor = bottomAppBar.color!;
+    expect(barColor, isNot(theme.colorScheme.surface));
+    expect(barColor, isNot(theme.colorScheme.onSurface));
+    expect(
+      _contrastRatio(theme.colorScheme.primary, barColor),
+      greaterThanOrEqualTo(4.5),
+    );
+    expect(
+      find.byKey(const Key('home-tab-label-readable-background')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const Key('home-tab-icon-readable-background')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('home bottom bar keeps surface for readable accent', (
+    tester,
+  ) async {
+    final theme = AppTheme.light;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: theme,
+        home: Scaffold(
+          bottomNavigationBar: HomeBottomNavigationBar(
+            selectedIndex: 0,
+            onSelect: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    final bottomAppBar = tester.widget<BottomAppBar>(find.byType(BottomAppBar));
+    expect(bottomAppBar.color, theme.colorScheme.surface);
+  });
+
+  testWidgets('home bottom bar shows split top border around center action', (
+    tester,
+  ) async {
+    final theme = AppTheme.light;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: theme,
+        home: Scaffold(
+          bottomNavigationBar: HomeBottomNavigationBar(
+            selectedIndex: 0,
+            onSelect: (_) {},
+          ),
+        ),
+      ),
+    );
+
+    final leftBorder = tester.widget<DecoratedBox>(
+      find.byKey(const Key('home-bottom-nav-top-border-left')),
+    );
+    final rightBorder = tester.widget<DecoratedBox>(
+      find.byKey(const Key('home-bottom-nav-top-border-right')),
+    );
+    final leftDecoration = leftBorder.decoration as BoxDecoration;
+    final rightDecoration = rightBorder.decoration as BoxDecoration;
+    final expectedColor = theme.colorScheme.primary;
+
+    expect(leftDecoration.color, expectedColor);
+    expect(rightDecoration.color, expectedColor);
+    expect(
+      tester
+          .getSize(find.byKey(const Key('home-bottom-nav-top-border-left')))
+          .height,
+      2,
+    );
+    expect(
+      tester
+          .getSize(find.byKey(const Key('home-bottom-nav-top-border-right')))
+          .height,
+      2,
+    );
+    expect(
+      find.byKey(const Key('home-bottom-nav-top-border-center')),
+      findsNothing,
+    );
+    final borderGap =
+        tester
+            .getTopLeft(
+              find.byKey(const Key('home-bottom-nav-top-border-right')),
+            )
+            .dx -
+        tester
+            .getTopRight(
+              find.byKey(const Key('home-bottom-nav-top-border-left')),
+            )
+            .dx;
+    expect(borderGap, 56);
+    expect(
+      tester
+          .getTopRight(find.byKey(const Key('home-bottom-nav-top-border-left')))
+          .dx,
+      lessThan(
+        tester
+            .getTopLeft(
+              find.byKey(const Key('home-bottom-nav-top-border-right')),
+            )
+            .dx,
+      ),
+    );
   });
 
   testWidgets('group detail floating action button is icon only', (
@@ -2678,6 +3590,10 @@ void main() {
     );
 
     final appBar = tester.widget<AppBar>(find.byType(AppBar));
+    final screenCenter = tester.getCenter(find.byType(Scaffold)).dx;
+    final titleGraphicCenter = tester
+        .getCenter(find.byKey(const Key('home-title-graphic')))
+        .dx;
     final titleGraphic = tester.widget<Image>(
       find.byKey(const Key('home-title-graphic')),
     );
@@ -2689,10 +3605,347 @@ void main() {
     );
     expect(find.text('Vesper'), findsNothing);
     expect(appBar.toolbarHeight, 96);
-    expect(titleGraphic.height, 96);
+    expect(titleGraphic.height, 77.76);
+    expect(titleGraphicCenter, closeTo(screenCenter, 0.1));
     expect(appBar.centerTitle, isTrue);
     expect(appBar.backgroundColor, Colors.transparent);
+    expect(find.byTooltip('App Settings'), findsOneWidget);
+    expect(find.byIcon(Icons.settings_outlined), findsOneWidget);
     expect(find.byTooltip('Profile'), findsOneWidget);
+  });
+
+  testWidgets('home header settings button opens app settings', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+
+    await tester.pumpWidget(
+      const ProviderScope(
+        child: MaterialApp(home: Scaffold(appBar: HomeHeader())),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('App Settings'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AppSettingsScreen), findsOneWidget);
+    expect(find.text('App Settings'), findsWidgets);
+    expect(find.text('Theme'), findsOneWidget);
+  });
+
+  testWidgets('app settings shows theme color options', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final theme = AppTheme.lightForDate(DateTime(2026, 12, 25));
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(theme: theme, home: const AppSettingsScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Theme'), findsOneWidget);
+    expect(find.byType(ThemeColorListItem), findsNWidgets(13));
+    expect(
+      find.byKey(const Key('theme-option-liturgical-roman')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('theme-option-liturgical-byzantine')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('theme-option-liturgical-russian')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('theme-option-liturgical-coptic')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('theme-option-liturgical-lutheran')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('theme-option-liturgical-anglican')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('theme-option-liturgical')), findsNothing);
+    expect(find.byKey(const Key('theme-option-purple')), findsOneWidget);
+    expect(find.byKey(const Key('theme-option-gold')), findsOneWidget);
+    expect(find.byKey(const Key('theme-option-lapis')), findsOneWidget);
+    expect(find.byKey(const Key('theme-option-black')), findsOneWidget);
+    expect(find.byKey(const Key('theme-option-red')), findsOneWidget);
+    expect(find.byKey(const Key('theme-option-green')), findsOneWidget);
+    expect(find.byKey(const Key('theme-option-custom')), findsOneWidget);
+    expect(find.text('Liturgical'), findsNothing);
+    expect(find.text('Liturgical (Roman)'), findsOneWidget);
+    expect(find.text('Liturgical (Byzantine)'), findsOneWidget);
+    expect(find.text('Liturgical (Russian)'), findsOneWidget);
+    expect(find.text('Liturgical (Coptic)'), findsOneWidget);
+    expect(find.text('Liturgical (Lutheran)'), findsOneWidget);
+    expect(find.text('Liturgical (Anglican)'), findsOneWidget);
+    expect(find.text('Purple'), findsOneWidget);
+    expect(find.text('Gold'), findsOneWidget);
+    expect(find.text('Blue'), findsOneWidget);
+    expect(find.text('Black'), findsOneWidget);
+    expect(find.text('Red'), findsOneWidget);
+    expect(find.text('Green'), findsOneWidget);
+    expect(find.text('Custom'), findsOneWidget);
+    expect(find.byIcon(Icons.calendar_month_outlined), findsNWidgets(6));
+    expect(find.byIcon(Icons.brush_outlined), findsOneWidget);
+    expect(find.text('Dynamic'), findsNothing);
+    expect(find.text('Advent/Lent'), findsNothing);
+    expect(find.text('Christmas/Easter'), findsNothing);
+    expect(find.text('Epiphany'), findsNothing);
+    expect(find.text('Good Friday'), findsNothing);
+    expect(find.text('Pentecost'), findsNothing);
+    expect(find.text('Ordinary Time'), findsNothing);
+    expect(
+      find.byKey(const Key('theme-option-liturgical-anglican-selected')),
+      findsOneWidget,
+    );
+
+    final liturgicalCircle = tester.widget<DecoratedBox>(
+      find.byKey(const Key('theme-option-liturgical-anglican-circle')),
+    );
+    final liturgicalDecoration = liturgicalCircle.decoration as BoxDecoration;
+    expect(liturgicalDecoration.color, AppTheme.light.colorScheme.primary);
+
+    final customCircle = tester.widget<DecoratedBox>(
+      find.byKey(const Key('theme-option-custom-circle')),
+    );
+    final customDecoration = customCircle.decoration as BoxDecoration;
+    expect(customDecoration.color, AppTheme.light.colorScheme.primary);
+    expect(customDecoration.gradient, isNull);
+  });
+
+  testWidgets('app settings fixed color selection updates selected option', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+
+    await tester.pumpWidget(
+      const ProviderScope(child: MaterialApp(home: AppSettingsScreen())),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('theme-option-purple')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('theme-option-purple-selected')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('theme preview circles do not react to selected theme', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({
+      'theme_color_mode': 'fixed',
+      'theme_fixed_option_id': 'purple',
+    });
+    final selectedTheme = AppTheme.lightForPreference(
+      const ThemePreference.fixed('purple'),
+    );
+    final liturgicalColor = AppTheme.light.colorScheme.primary;
+
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          theme: selectedTheme,
+          home: const AppSettingsScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final liturgicalCircle = tester.widget<DecoratedBox>(
+      find.byKey(const Key('theme-option-liturgical-anglican-circle')),
+    );
+    final liturgicalDecoration = liturgicalCircle.decoration as BoxDecoration;
+    expect(liturgicalDecoration.color, liturgicalColor);
+    expect(
+      liturgicalDecoration.color,
+      isNot(selectedTheme.colorScheme.primary),
+    );
+
+    final customCircle = tester.widget<DecoratedBox>(
+      find.byKey(const Key('theme-option-custom-circle')),
+    );
+    final customDecoration = customCircle.decoration as BoxDecoration;
+    expect(customDecoration.color, liturgicalColor);
+    expect(customDecoration.gradient, isNull);
+  });
+
+  testWidgets(
+    'app settings liturgical rite selection updates selected option',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+
+      await tester.pumpWidget(
+        const ProviderScope(child: MaterialApp(home: AppSettingsScreen())),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('theme-option-liturgical-roman')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('theme-option-liturgical-roman-selected')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const Key('theme-option-liturgical-anglican-selected')),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets('custom theme option previews selected custom color', (
+    tester,
+  ) async {
+    const customColor = Color(0xff114477);
+    SharedPreferences.setMockInitialValues({
+      'theme_color_mode': 'custom',
+      'theme_custom_color': 0xff114477,
+    });
+
+    await tester.pumpWidget(
+      const ProviderScope(child: MaterialApp(home: AppSettingsScreen())),
+    );
+    await tester.pumpAndSettle();
+
+    final customCircle = tester.widget<DecoratedBox>(
+      find.byKey(const Key('theme-option-custom-circle')),
+    );
+    final customDecoration = customCircle.decoration as BoxDecoration;
+
+    expect(customDecoration.color, customColor);
+    expect(customDecoration.gradient, isNull);
+  });
+
+  testWidgets('app settings custom option opens color picker', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+
+    await tester.pumpWidget(
+      const ProviderScope(child: MaterialApp(home: AppSettingsScreen())),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.byKey(const Key('theme-option-custom')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('theme-option-custom')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Custom Color'), findsOneWidget);
+    expect(find.text('Choose an accent color for Vesper.'), findsOneWidget);
+    expect(find.text('Choose a quiet accent color for Vesper.'), findsNothing);
+    expect(find.text('Use color'), findsOneWidget);
+  });
+
+  testWidgets(
+    'custom color picker warns when color needs adjusted backgrounds',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: ThemeColorPickerSheet(initialColor: Colors.white),
+            ),
+          ),
+        ),
+      );
+
+      final warning = find.byKey(const Key('custom-color-readability-warning'));
+
+      expect(warning, findsOneWidget);
+      expect(
+        find.text('Some backgrounds will adjust for readability.'),
+        findsOneWidget,
+      );
+      expect(
+        tester.getCenter(warning).dx,
+        greaterThan(tester.getCenter(find.text('Use color')).dx),
+      );
+    },
+  );
+
+  testWidgets('custom color picker hides warning while choosing color', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+
+    await tester.pumpWidget(
+      const ProviderScope(
+        child: MaterialApp(
+          home: Scaffold(
+            body: ThemeColorPickerSheet(initialColor: Colors.white),
+          ),
+        ),
+      ),
+    );
+
+    final warning = find.byKey(const Key('custom-color-readability-warning'));
+    final picker = find.byKey(const Key('custom-color-picker-interaction'));
+
+    expect(warning, findsOneWidget);
+
+    final gesture = await tester.startGesture(tester.getCenter(picker));
+    await tester.pump();
+
+    expect(warning, findsNothing);
+
+    await gesture.up();
+    await tester.pump();
+  });
+
+  testWidgets('custom color picker hides warning for readable color', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+
+    await tester.pumpWidget(
+      const ProviderScope(
+        child: MaterialApp(
+          home: Scaffold(
+            body: ThemeColorPickerSheet(initialColor: Color(0xff336699)),
+          ),
+        ),
+      ),
+    );
+
+    expect(
+      find.byKey(const Key('custom-color-readability-warning')),
+      findsNothing,
+    );
+    expect(
+      find.text('Some backgrounds will adjust for readability.'),
+      findsNothing,
+    );
+  });
+
+  testWidgets('home header keeps title graphic below top safe area', (
+    tester,
+  ) async {
+    const topSafeArea = 59.0;
+    final physicalTopSafeArea = topSafeArea * tester.view.devicePixelRatio;
+
+    tester.view.padding = FakeViewPadding(top: physicalTopSafeArea);
+    tester.view.viewPadding = FakeViewPadding(top: physicalTopSafeArea);
+    addTearDown(tester.view.resetPadding);
+    addTearDown(tester.view.resetViewPadding);
+
+    await tester.pumpWidget(
+      const MaterialApp(home: Scaffold(appBar: HomeHeader())),
+    );
+
+    final titleGraphicTop = tester
+        .getTopLeft(find.byKey(const Key('home-title-graphic')))
+        .dy;
+
+    expect(titleGraphicTop, greaterThanOrEqualTo(topSafeArea));
   });
 
   testWidgets('group actions sheet creates immediate-publication groups', (

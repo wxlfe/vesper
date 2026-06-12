@@ -184,11 +184,10 @@ Leaders may read pending join requests for their groups. Approving a join reques
 
 ## `prayer_requests`
 
-Stores encrypted request payloads plus non-sensitive routing metadata.
+Stores one canonical encrypted request payload plus non-sensitive owner metadata. Requests are user-created first and may remain private to the creator or be shared to one or more groups through `request_shares`.
 
 ```json
 {
-  "groupId": "groupId",
   "createdBy": "userId",
   "createdAt": "timestamp",
   "updatedAt": "timestamp",
@@ -229,21 +228,67 @@ Allowed statuses:
 - `archived`
 - `deleted`
 
-The default group feed shows `active` requests only, ordered from newest to oldest. `answered`, `resolved`, and `archived` requests remain stored statuses but do not appear in the default group feed. Leaders may remove another member's request by transitioning it to `deleted` or archive it when appropriate.
+The default personal feed shows the current user's non-deleted requests: `active`, `answered`, `resolved`, and `archived`. Group feeds are assembled from `request_shares`, then each canonical request is decrypted through the viewer's `request_key_grants` document found by `requestId` and `userId`. `answered`, `resolved`, and `archived` requests remain stored statuses but do not appear in the default group feed unless the product explicitly adds those filters.
 
-Request authors may manage their own requests after creation. Updating a request must re-encrypt the title, plaintext body fallback, and rich text body on-device before writing replacement ciphertext. Removing a request should transition it to `deleted` rather than deleting the document directly. Authors may also mark their own requests as `answered`.
+Request authors may manage their own canonical requests after creation. Updating a request must re-encrypt the title, plaintext body fallback, and rich text body on-device before writing replacement ciphertext. Removing a request should transition it to `deleted` rather than deleting the document directly. Authors may also mark their own requests as `answered`.
+
+## `request_shares`
+
+Stores metadata-only group visibility for canonical requests.
+
+```json
+{
+  "requestId": "requestId",
+  "groupId": "groupId",
+  "sharedBy": "userId",
+  "sharedAt": "timestamp",
+  "status": "active",
+  "removedAt": null,
+  "removedBy": null
+}
+```
+
+Allowed statuses:
+
+- `active`
+- `removed`
+- `deleted`
+
+Leaders removing a request from a group update only that group's share record. This does not delete the canonical request, remove other group shares, or imply cryptographic revocation from devices that already received a request key grant.
+
+## `request_key_grants`
+
+Stores one encrypted request content key per authorized user per request.
+
+```json
+{
+  "requestId": "requestId",
+  "userId": "userId",
+  "grantedBy": "userId",
+  "grantedViaGroupId": "groupId-or-null",
+  "createdAt": "timestamp",
+  "encryptedGroupKey": "base64",
+  "nonce": "base64",
+  "ephemeralPublicKey": "base64",
+  "algorithm": "x25519-xchacha20-poly1305"
+}
+```
+
+Despite the field name `encryptedGroupKey`, the encrypted value is a request content key. The existing wrapping format is reused so private keys and plaintext request keys never leave trusted devices. Users may read only their own grants.
 
 ### Multi-Group Request Submission
 
 The centered bottom `+` request action opens a request composer where the user selects one or more active groups with checkboxes and a `Select All` option.
 
-Submitting to multiple groups must create one `prayer_requests` document per selected group. Each document uses that group's `groupId`, active `keyVersion`, ciphertext, and nonce. Do not create a shared multi-group plaintext record, and do not store a plaintext summary of which groups received the request.
+Submitting to multiple groups must create one canonical `prayer_requests` document and one `request_shares` document per selected group. Each authorized recipient receives a `request_key_grants` document wrapping the same request content key to their public key. Do not create duplicate encrypted request documents for each group, and do not store plaintext request summaries.
 
 If some group writes fail, successful group writes remain submitted. The client should show calm partial-success copy and allow retry for failed groups.
 
 ## `request_reports`
 
 Stores metadata-only request reports for Leader review. Reports must not include plaintext request title, body, summaries, tags, notes, or free-text reasons.
+
+Report IDs are scoped by request, group, and reporter: `{requestId}_{groupId}_{userId}`. This allows one canonical request to be reported through each group where it appears without cross-group collisions.
 
 ```json
 {
@@ -263,7 +308,7 @@ Allowed statuses:
 - `dismissed`
 - `removed`
 
-Any active member may report a request in their group. Reports are visible only to Leaders in Group Settings. Leaders may dismiss a report, archive the request, or remove the reported request.
+Any active member may report a request in their group. Reports are visible only to Leaders in Group Settings. If a consolidated feed item is visible through multiple groups, reporting it creates one metadata-only report for each relevant group. Leaders may dismiss a report, archive the request, or remove the reported request from their group feed.
 
 ## `prayer_updates`
 
@@ -298,14 +343,13 @@ Stores lightweight care actions that do not expose prayer content.
 ```json
 {
   "requestId": "requestId",
-  "groupId": "groupId",
   "userId": "userId",
   "type": "prayed",
   "createdAt": "timestamp"
 }
 ```
 
-Prayer participation counts may be shown quietly as care context, such as `3 joining in prayer`. Do not present these actions as likes, reactions, rankings, streaks, or engagement metrics.
+Prayer participation counts are aggregated by canonical `requestId`, not by group. One request shared to two groups shows a total unique count across all groups, and a user who belongs to both groups counts once. Prayer participation may be shown quietly as care context, such as `3 joining in prayer`. Do not present these actions as likes, reactions, rankings, streaks, or engagement metrics.
 
 ## `prayer_sessions`
 
@@ -534,8 +578,9 @@ Recommended indexes:
 - `invite_codes`: `groupId`, `status`, `createdAt`
 - `join_requests`: `groupId`, `status`, `createdAt`
 - `join_requests`: `requestedBy`, `status`, `createdAt`
-- `prayer_requests`: `groupId`, `status`, `updatedAt`
-- `prayer_requests`: `groupId`, `status`, `createdAt` for group feeds
+- `prayer_requests`: `createdBy`, `status`, `createdAt` for personal feeds
+- `request_shares`: `groupId`, `status`, `sharedAt` for group feeds
+- `request_key_grants`: `userId`, `requestId`
 - `request_reports`: `groupId`, `status`, `createdAt`
 - `prayer_updates`: `requestId`, `createdAt`
 - `prayer_actions`: `requestId`, `userId`, `type`
@@ -547,14 +592,15 @@ Recommended indexes:
 - `notifications`: `userId`, `readAt`, `createdAt`
 - `audit_events`: `groupId`, `createdAt`
 
-Avoid backend global feeds and cross-group request queries. The consolidated request organizer should be assembled client-side from active memberships and group-scoped request reads.
+Avoid backend plaintext feed assembly. The consolidated request organizer should be assembled client-side from active memberships, request shares, canonical encrypted requests, and local decryption through request key grants.
 
 ## Security Rules Requirements
 
 - Users may only read groups where they have an active membership.
 - Users may only read their own encrypted group keys.
-- Users may only create prayer requests for groups where they are active members.
-- Multi-group request submission must be validated as separate group-scoped writes.
+- Users may create private canonical prayer requests for themselves.
+- Users may share requests only to groups where they are active members.
+- Multi-group request submission must create one canonical encrypted request, one share per group, and encrypted request key grants for authorized recipients.
 - Group members may read request statuses such as `active`, `answered`, `resolved`, and `archived` according to membership access.
 - Request reports may be created by active members and read or resolved only by Leaders.
 - Any active member may create invite codes when group settings allow member invites.

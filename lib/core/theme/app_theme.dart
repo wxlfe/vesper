@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:vesper/core/theme/liturgical_season.dart';
+import 'package:vesper/core/theme/theme_preference.dart';
 
 class AppTheme {
   static const _lightBackground = Color(0xfffbf3df);
@@ -32,17 +33,165 @@ class AppTheme {
   static const _darkLapis = Color(0xff8fb4d8);
   static const _darkMalachite = Color(0xff8eb28b);
 
+  static const liturgicalThemeOptions = [
+    LiturgicalThemeOption(
+      id: 'anglican',
+      label: 'Liturgical (Anglican)',
+      rite: LiturgicalRite.anglican,
+    ),
+    LiturgicalThemeOption(
+      id: 'roman',
+      label: 'Liturgical (Roman)',
+      rite: LiturgicalRite.roman,
+    ),
+    LiturgicalThemeOption(
+      id: 'byzantine',
+      label: 'Liturgical (Byzantine)',
+      rite: LiturgicalRite.byzantine,
+    ),
+    LiturgicalThemeOption(
+      id: 'russian',
+      label: 'Liturgical (Russian)',
+      rite: LiturgicalRite.russian,
+    ),
+    LiturgicalThemeOption(
+      id: 'coptic',
+      label: 'Liturgical (Coptic)',
+      rite: LiturgicalRite.coptic,
+    ),
+    LiturgicalThemeOption(
+      id: 'lutheran',
+      label: 'Liturgical (Lutheran)',
+      rite: LiturgicalRite.lutheran,
+    ),
+  ];
+
+  static const themeColorOptions = [
+    ThemeColorOption(
+      id: 'purple',
+      label: 'Purple',
+      lightColor: _lightIconPurple,
+      darkColor: _darkIconPurple,
+    ),
+    ThemeColorOption(
+      id: 'gold',
+      label: 'Gold',
+      lightColor: _lightGold,
+      darkColor: _darkGold,
+    ),
+    ThemeColorOption(
+      id: 'lapis',
+      label: 'Blue',
+      lightColor: _lightLapis,
+      darkColor: _darkLapis,
+    ),
+    ThemeColorOption(
+      id: 'black',
+      label: 'Black',
+      lightColor: _lightGoodFriday,
+      darkColor: _darkGoodFriday,
+    ),
+    ThemeColorOption(
+      id: 'red',
+      label: 'Red',
+      lightColor: _lightPentecost,
+      darkColor: _darkPentecost,
+    ),
+    ThemeColorOption(
+      id: 'green',
+      label: 'Green',
+      lightColor: _lightIconGreen,
+      darkColor: _darkIconGreen,
+    ),
+  ];
+
   static ThemeData get light => lightForDate(DateTime.now());
 
   static ThemeData get dark => darkForDate(DateTime.now());
 
   static ThemeData lightForDate(DateTime date) {
-    return lightForSeason(liturgicalSeasonFor(date));
+    return lightForLiturgicalRite(LiturgicalRite.anglican, date);
   }
 
   static ThemeData darkForDate(DateTime date) {
-    return darkForSeason(liturgicalSeasonFor(date));
+    return darkForLiturgicalRite(LiturgicalRite.anglican, date);
   }
+
+  static ThemeData lightForLiturgicalRite(LiturgicalRite rite, DateTime date) {
+    return lightForPrimary(_lightPrimaryForRite(rite, date));
+  }
+
+  static ThemeData darkForLiturgicalRite(LiturgicalRite rite, DateTime date) {
+    return darkForPrimary(_darkPrimaryForRite(rite, date));
+  }
+
+  static ThemeData lightForPreference(
+    ThemePreference preference, {
+    DateTime? date,
+  }) {
+    return switch (preference.mode) {
+      ThemeColorMode.liturgical => lightForLiturgicalRite(
+        preference.liturgicalRite ?? LiturgicalRite.anglican,
+        date ?? DateTime.now(),
+      ),
+      ThemeColorMode.fixed => lightForPrimary(
+        _optionForId(preference.fixedOptionId).lightColor,
+      ),
+      ThemeColorMode.custom => lightForPrimary(
+        preference.customColor ?? _lightIconGreen,
+      ),
+    };
+  }
+
+  static ThemeData darkForPreference(
+    ThemePreference preference, {
+    DateTime? date,
+  }) {
+    return switch (preference.mode) {
+      ThemeColorMode.liturgical => darkForLiturgicalRite(
+        preference.liturgicalRite ?? LiturgicalRite.anglican,
+        date ?? DateTime.now(),
+      ),
+      ThemeColorMode.fixed => darkForPrimary(
+        _optionForId(preference.fixedOptionId).darkColor,
+      ),
+      ThemeColorMode.custom => darkForPrimary(
+        preference.customColor ?? _darkIconGreen,
+      ),
+    };
+  }
+
+  static ThemeData lightForPrimary(Color primaryAccent) => _theme(
+    brightness: Brightness.light,
+    background: _lightBackground,
+    surface: _lightSurface,
+    raisedSurface: _lightRaisedSurface,
+    primaryText: _lightText,
+    secondaryText: _lightSecondary,
+    mutedText: _lightMuted,
+    divider: _lightDivider,
+    gold: _lightGold,
+    primaryAccent: primaryAccent,
+    purple: _lightIconPurple,
+    lapis: _lightLapis,
+    malachite: _lightMalachite,
+  );
+
+  static ThemeData darkForPrimary(Color primaryAccent) => _theme(
+    brightness: Brightness.dark,
+    background: _darkBackground,
+    surface: _darkSurface,
+    raisedSurface: _darkRaisedSurface,
+    primaryText: _darkText,
+    secondaryText: _darkSecondary,
+    mutedText: _darkMuted,
+    divider: _darkDivider,
+    gold: _darkGold,
+    primaryAccent: primaryAccent,
+    purple: _darkIconPurple,
+    lapis: _darkLapis,
+    malachite: _darkMalachite,
+  );
 
   static ThemeData lightForSeason(LiturgicalSeason season) => _theme(
     brightness: Brightness.light,
@@ -100,6 +249,194 @@ class AppTheme {
       LiturgicalSeason.pentecost => _darkPentecost,
       LiturgicalSeason.ordinary => _darkIconGreen,
     };
+  }
+
+  static Color _lightPrimaryForRite(LiturgicalRite rite, DateTime date) {
+    return switch (_colorForRite(rite, date)) {
+      _LiturgicalColor.purple => _lightIconPurple,
+      _LiturgicalColor.gold => _lightGold,
+      _LiturgicalColor.blue => _lightLapis,
+      _LiturgicalColor.red => _lightPentecost,
+      _LiturgicalColor.black => _lightGoodFriday,
+      _LiturgicalColor.green => _lightIconGreen,
+    };
+  }
+
+  static Color _darkPrimaryForRite(LiturgicalRite rite, DateTime date) {
+    return switch (_colorForRite(rite, date)) {
+      _LiturgicalColor.purple => _darkIconPurple,
+      _LiturgicalColor.gold => _darkGold,
+      _LiturgicalColor.blue => _darkLapis,
+      _LiturgicalColor.red => _darkPentecost,
+      _LiturgicalColor.black => _darkGoodFriday,
+      _LiturgicalColor.green => _darkIconGreen,
+    };
+  }
+
+  static _LiturgicalColor _colorForRite(LiturgicalRite rite, DateTime date) {
+    return switch (rite) {
+      LiturgicalRite.roman ||
+      LiturgicalRite.anglican ||
+      LiturgicalRite.lutheran => _westernColorFor(date),
+      LiturgicalRite.byzantine => _byzantineColorFor(date),
+      LiturgicalRite.russian => _russianColorFor(date),
+      LiturgicalRite.coptic => _copticColorFor(date),
+    };
+  }
+
+  static _LiturgicalColor _westernColorFor(DateTime date) {
+    return switch (liturgicalSeasonFor(date)) {
+      LiturgicalSeason.advent ||
+      LiturgicalSeason.lent ||
+      LiturgicalSeason.holyWeek => _LiturgicalColor.purple,
+      LiturgicalSeason.christmas ||
+      LiturgicalSeason.easter => _LiturgicalColor.gold,
+      LiturgicalSeason.epiphany => _LiturgicalColor.blue,
+      LiturgicalSeason.goodFriday => _LiturgicalColor.black,
+      LiturgicalSeason.pentecost => _LiturgicalColor.red,
+      LiturgicalSeason.ordinary => _LiturgicalColor.green,
+    };
+  }
+
+  static _LiturgicalColor _byzantineColorFor(DateTime date) {
+    final day = _dateOnly(date);
+    final pascha = _orthodoxPascha(day.year);
+    if (_isSameDay(day, pascha.subtract(const Duration(days: 2)))) {
+      return _LiturgicalColor.black;
+    }
+    if (!_isBefore(day, pascha) &&
+        !day.isAfter(pascha.add(const Duration(days: 39)))) {
+      return _LiturgicalColor.gold;
+    }
+    if (_isSameDay(day, pascha.add(const Duration(days: 49)))) {
+      return _LiturgicalColor.green;
+    }
+    if (_isSameMonthDay(day, 3, 25) || _isSameMonthDay(day, 8, 15)) {
+      return _LiturgicalColor.blue;
+    }
+    if (_isSameMonthDay(day, 12, 25) || _isSameMonthDay(day, 1, 6)) {
+      return _LiturgicalColor.gold;
+    }
+    if (_isInRange(
+          day,
+          DateTime(day.year, 11, 15),
+          DateTime(day.year, 12, 24),
+        ) ||
+        _isInRange(
+          day,
+          pascha.subtract(const Duration(days: 48)),
+          pascha.subtract(const Duration(days: 3)),
+        )) {
+      return _LiturgicalColor.purple;
+    }
+    return _LiturgicalColor.green;
+  }
+
+  static _LiturgicalColor _russianColorFor(DateTime date) {
+    final day = _dateOnly(date);
+    final pascha = _orthodoxPascha(day.year);
+    if (_isSameDay(day, pascha.subtract(const Duration(days: 2)))) {
+      return _LiturgicalColor.black;
+    }
+    if (!_isBefore(day, pascha) &&
+        !day.isAfter(pascha.add(const Duration(days: 39)))) {
+      return _LiturgicalColor.gold;
+    }
+    if (_isSameDay(day, pascha.add(const Duration(days: 49)))) {
+      return _LiturgicalColor.green;
+    }
+    if (_isSameMonthDay(day, 4, 7) || _isSameMonthDay(day, 8, 28)) {
+      return _LiturgicalColor.blue;
+    }
+    if (_isSameMonthDay(day, 1, 7) || _isSameMonthDay(day, 1, 19)) {
+      return _LiturgicalColor.gold;
+    }
+    if (_isInRange(
+          day,
+          DateTime(day.year, 11, 28),
+          DateTime(day.year, 12, 31),
+        ) ||
+        _isInRange(day, DateTime(day.year, 1, 1), DateTime(day.year, 1, 6)) ||
+        _isInRange(
+          day,
+          pascha.subtract(const Duration(days: 48)),
+          pascha.subtract(const Duration(days: 3)),
+        )) {
+      return _LiturgicalColor.purple;
+    }
+    return _LiturgicalColor.green;
+  }
+
+  static _LiturgicalColor _copticColorFor(DateTime date) {
+    final day = _dateOnly(date);
+    final resurrection = _orthodoxPascha(day.year);
+    if (_isSameDay(day, resurrection.subtract(const Duration(days: 2)))) {
+      return _LiturgicalColor.black;
+    }
+    if (!_isBefore(day, resurrection) &&
+        !day.isAfter(resurrection.add(const Duration(days: 39)))) {
+      return _LiturgicalColor.gold;
+    }
+    if (_isSameDay(day, resurrection.add(const Duration(days: 49)))) {
+      return _LiturgicalColor.red;
+    }
+    if (_isSameMonthDay(day, 1, 7) || _isSameMonthDay(day, 9, 11)) {
+      return _LiturgicalColor.gold;
+    }
+    if (_isInRange(
+          day,
+          DateTime(day.year, 11, 25),
+          DateTime(day.year, 12, 31),
+        ) ||
+        _isInRange(day, DateTime(day.year, 1, 1), DateTime(day.year, 1, 6)) ||
+        _isInRange(
+          day,
+          resurrection.subtract(const Duration(days: 55)),
+          resurrection.subtract(const Duration(days: 3)),
+        )) {
+      return _LiturgicalColor.purple;
+    }
+    return _LiturgicalColor.green;
+  }
+
+  static DateTime _orthodoxPascha(int year) {
+    final a = year % 4;
+    final b = year % 7;
+    final c = year % 19;
+    final d = (19 * c + 15) % 30;
+    final e = (2 * a + 4 * b - d + 34) % 7;
+    final month = (d + e + 114) ~/ 31;
+    final day = ((d + e + 114) % 31) + 1;
+    return DateTime(year, month, day).add(const Duration(days: 13));
+  }
+
+  static DateTime _dateOnly(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
+  }
+
+  static bool _isSameDay(DateTime first, DateTime second) {
+    return first.year == second.year &&
+        first.month == second.month &&
+        first.day == second.day;
+  }
+
+  static bool _isSameMonthDay(DateTime date, int month, int day) {
+    return date.month == month && date.day == day;
+  }
+
+  static bool _isBefore(DateTime first, DateTime second) {
+    return first.compareTo(second) < 0;
+  }
+
+  static bool _isInRange(DateTime date, DateTime start, DateTime end) {
+    return !_isBefore(date, start) && !date.isAfter(end);
+  }
+
+  static ThemeColorOption _optionForId(String? id) {
+    return themeColorOptions.firstWhere(
+      (option) => option.id == id,
+      orElse: () => themeColorOptions.last,
+    );
   }
 
   static ThemeData _theme({
@@ -293,3 +630,5 @@ class AppTheme {
     return (lighter + 0.05) / (darker + 0.05);
   }
 }
+
+enum _LiturgicalColor { purple, gold, blue, red, black, green }

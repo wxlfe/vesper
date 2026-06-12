@@ -52,7 +52,7 @@ The `Pray` tab should feel like opening a personal prayer book. It is the signed
 
 Routines should appear in a horizontally scrollable row of circular icons with short labels, visually similar to the layout pattern of Instagram Stories but without social-story behavior. Do not include viewers, public activity rings, expiration, reactions, streaks, or engagement indicators. A `Create Routine` action must remain visible whether the user has no routines, one routine, or many routines.
 
-Below the routine row, the consolidated request feed should show requests from all groups where the user is an active member. This feed remains private to the viewing user and assembled from group-scoped reads.
+Below the routine row, the consolidated request feed should show requests from all groups where the user is an active member. This feed remains private to the viewing user and assembled from group-scoped reads. If the same canonical request is visible through multiple groups, it should appear once and show all relevant group names.
 
 Routine sections should be easy to scan and easy to reorder without feeling like task management. The app may use manuscript-inspired section dividers, rubrics, and initials, but reading clarity comes first.
 

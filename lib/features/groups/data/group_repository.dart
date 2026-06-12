@@ -64,7 +64,7 @@ class GroupRepository {
 
   Stream<int> watchRequestCount(String groupId) {
     return _firestore
-        .collection('prayer_requests')
+        .collection('request_shares')
         .where('groupId', isEqualTo: groupId)
         .where('status', isEqualTo: 'active')
         .snapshots()

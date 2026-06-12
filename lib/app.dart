@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_quill/flutter_quill.dart' as quill;
@@ -9,9 +12,12 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:vesper/core/models/app_models.dart';
 import 'package:vesper/core/services/app_providers.dart';
 import 'package:vesper/core/theme/app_theme.dart';
+import 'package:vesper/core/theme/theme_preference.dart';
+import 'package:vesper/core/theme/theme_preference_controller.dart';
 import 'package:vesper/core/widgets/manuscript_widgets.dart';
 import 'package:vesper/features/groups/data/group_repository.dart';
 import 'package:vesper/features/profile/data/user_profile_repository.dart';
+import 'package:vesper/features/requests/data/prayer_request_repository.dart';
 import 'package:vesper/shared/rich_text/rich_text_widgets.dart';
 
 class VesperApp extends ConsumerWidget {
@@ -19,11 +25,14 @@ class VesperApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final themePreference =
+        ref.watch(themePreferenceProvider).value ??
+        const ThemePreference.liturgical();
     return MaterialApp(
       title: 'Vesper',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light,
-      darkTheme: AppTheme.dark,
+      theme: AppTheme.lightForPreference(themePreference),
+      darkTheme: AppTheme.darkForPreference(themePreference),
       home: ref
           .watch(authStateProvider)
           .when(
@@ -167,27 +176,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         tooltip: 'Submit prayer request',
         child: const Icon(Icons.add),
       ),
-      bottomNavigationBar: BottomAppBar(
-        notchMargin: 8,
-        child: Row(
-          children: [
-            Expanded(
-              child: TextButton.icon(
-                onPressed: () => setState(() => _selectedIndex = 0),
-                icon: const Icon(Icons.auto_stories_outlined),
-                label: const Text('Pray'),
-              ),
-            ),
-            const SizedBox(width: 72),
-            Expanded(
-              child: TextButton.icon(
-                onPressed: () => setState(() => _selectedIndex = 1),
-                icon: const Icon(Icons.groups_outlined),
-                label: const Text('Groups'),
-              ),
-            ),
-          ],
-        ),
+      bottomNavigationBar: HomeBottomNavigationBar(
+        selectedIndex: _selectedIndex,
+        onSelect: (index) => setState(() => _selectedIndex = index),
       ),
     );
   }
@@ -202,6 +193,140 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           return PrayerComposerSheet(groups: snapshot.data ?? const []);
         },
       ),
+    );
+  }
+}
+
+class HomeBottomNavigationBar extends StatelessWidget {
+  const HomeBottomNavigationBar({
+    super.key,
+    required this.selectedIndex,
+    required this.onSelect,
+  });
+
+  final int selectedIndex;
+  final ValueChanged<int> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final barColor = _readableAccentBackground(
+      accent: colorScheme.primary,
+      base: colorScheme.surface,
+      target: colorScheme.onSurface,
+    );
+    final borderColor = colorScheme.primary;
+    return Stack(
+      children: [
+        BottomAppBar(
+          color: barColor,
+          notchMargin: 8,
+          child: Row(
+            children: [
+              Expanded(
+                child: HomeTabButton(
+                  icon: Icons.auto_stories_outlined,
+                  label: 'Pray',
+                  onPressed: () => onSelect(0),
+                ),
+              ),
+              const SizedBox(width: 72),
+              Expanded(
+                child: HomeTabButton(
+                  icon: Icons.groups_outlined,
+                  label: 'Groups',
+                  onPressed: () => onSelect(1),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: IgnorePointer(
+            child: Row(
+              children: [
+                Expanded(
+                  child: SizedBox(
+                    height: 2,
+                    child: DecoratedBox(
+                      key: const Key('home-bottom-nav-top-border-left'),
+                      decoration: BoxDecoration(color: borderColor),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 56),
+                Expanded(
+                  child: SizedBox(
+                    height: 2,
+                    child: DecoratedBox(
+                      key: const Key('home-bottom-nav-top-border-right'),
+                      decoration: BoxDecoration(color: borderColor),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Color _readableAccentBackground({
+    required Color accent,
+    required Color base,
+    required Color target,
+  }) {
+    const minimumContrast = 4.5;
+    if (_contrastRatio(accent, base) >= minimumContrast) return base;
+
+    for (var step = 1; step < 20; step += 1) {
+      final amount = step / 20;
+      final candidate = Color.lerp(base, target, amount)!;
+      if (_contrastRatio(accent, candidate) >= minimumContrast) {
+        return candidate;
+      }
+    }
+
+    return target;
+  }
+
+  double _contrastRatio(Color foreground, Color background) {
+    final foregroundLuminance = foreground.computeLuminance();
+    final backgroundLuminance = background.computeLuminance();
+    final lighter = foregroundLuminance > backgroundLuminance
+        ? foregroundLuminance
+        : backgroundLuminance;
+    final darker = foregroundLuminance > backgroundLuminance
+        ? backgroundLuminance
+        : foregroundLuminance;
+    return (lighter + 0.05) / (darker + 0.05);
+  }
+}
+
+class HomeTabButton extends StatelessWidget {
+  const HomeTabButton({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return TextButton.icon(
+      style: TextButton.styleFrom(foregroundColor: colorScheme.primary),
+      onPressed: onPressed,
+      icon: Icon(icon),
+      label: Text(label),
     );
   }
 }
@@ -570,7 +695,12 @@ class RoutineSectionBody extends ConsumerWidget {
       return StreamBuilder<List<VesperGroup>>(
         stream: ref.watch(groupRepositoryProvider).watchMyGroups(),
         builder: (context, snapshot) {
-          final groups = snapshot.data ?? const <VesperGroup>[];
+          if (snapshot.hasError) {
+            logGroupStreamError(snapshot.error, snapshot.stackTrace);
+            return const EmptyCard(text: 'We could not load your groups.');
+          }
+          if (!snapshot.hasData) return const RequestFeedLoading();
+          final groups = snapshot.data!;
           if (groups.isEmpty) {
             return const Text('No requests are ready here yet.');
           }
@@ -653,7 +783,7 @@ class _RoutineEditScreenState extends ConsumerState<RoutineEditScreen> {
       builder: (context, snapshot) {
         final sections = sortedRoutineSections(snapshot.data ?? const []);
         return Scaffold(
-          appBar: AppBar(title: const Text('Edit routine')),
+          appBar: AppBar(title: const Text('Edit Routine')),
           body: SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(24, 24, 24, 96),
@@ -685,7 +815,7 @@ class _RoutineEditScreenState extends ConsumerState<RoutineEditScreen> {
                       physics: const NeverScrollableScrollPhysics(),
                       buildDefaultDragHandles: false,
                       itemCount: sections.length,
-                      onReorder: _busy
+                      onReorderItem: _busy
                           ? (_, _) {}
                           : (oldIndex, newIndex) =>
                                 _reorderSections(oldIndex, newIndex, sections),
@@ -743,7 +873,6 @@ class _RoutineEditScreenState extends ConsumerState<RoutineEditScreen> {
     int newIndex,
     List<RoutineSection> sections,
   ) async {
-    if (newIndex > oldIndex) newIndex -= 1;
     if (oldIndex == newIndex) return;
     final reordered = [...sections];
     final moved = reordered.removeAt(oldIndex);
@@ -812,7 +941,7 @@ class _RoutineEditScreenState extends ConsumerState<RoutineEditScreen> {
           shrinkWrap: true,
           padding: const EdgeInsets.all(16),
           children: [
-            Text('Add section', style: Theme.of(context).textTheme.titleLarge),
+            Text('Add Section', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 8),
             ListTile(
               key: const ValueKey('add-section-custom_text'),
@@ -824,7 +953,7 @@ class _RoutineEditScreenState extends ConsumerState<RoutineEditScreen> {
             ),
             ListTile(
               key: const ValueKey('add-section-request_feed'),
-              title: const Text('Request feed'),
+              title: const Text('Request Feed'),
               onTap: () =>
                   Navigator.of(context).pop(RoutineSectionType.requestFeed),
             ),
@@ -889,7 +1018,7 @@ class _RoutineSectionEditScreenState
   Widget build(BuildContext context) {
     final title = routineSectionDisplayTitle(widget.section);
     return Scaffold(
-      appBar: AppBar(title: const Text('Edit section')),
+      appBar: AppBar(title: const Text('Edit Section')),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
@@ -1004,30 +1133,34 @@ class _RoutineSectionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final title = routineSectionDisplayTitle(section);
-    return ManuscriptCard(
-      padding: const EdgeInsets.all(8),
-      child: ListTile(
-        leading: ReorderableDragStartListener(
-          index: index,
-          enabled: !busy,
-          child: Semantics(
-            label: 'Reorder $title',
-            button: true,
-            child: const SizedBox(
-              width: 48,
-              height: 48,
-              child: Icon(Icons.drag_handle),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: ManuscriptCard(
+        padding: const EdgeInsets.all(8),
+        innerBorder: true,
+        child: ListTile(
+          leading: ReorderableDragStartListener(
+            index: index,
+            enabled: !busy,
+            child: Semantics(
+              label: 'Reorder $title',
+              button: true,
+              child: const SizedBox(
+                width: 48,
+                height: 48,
+                child: Icon(Icons.drag_handle),
+              ),
             ),
           ),
+          title: Text(title),
+          subtitle: Text(routineSectionTypeLabel(section.type)),
+          trailing: IconButton(
+            tooltip: 'Edit $title',
+            onPressed: busy ? null : () => onEdit(section),
+            icon: const Icon(Icons.edit_outlined),
+          ),
+          onTap: busy ? null : () => onEdit(section),
         ),
-        title: Text(title),
-        subtitle: Text(routineSectionTypeLabel(section.type)),
-        trailing: IconButton(
-          tooltip: 'Edit $title',
-          onPressed: busy ? null : () => onEdit(section),
-          icon: const Icon(Icons.edit_outlined),
-        ),
-        onTap: busy ? null : () => onEdit(section),
       ),
     );
   }
@@ -1060,26 +1193,164 @@ String routineSectionDisplayTitle(RoutineSection section) {
 String routineSectionTypeLabel(RoutineSectionType type) {
   return switch (type) {
     RoutineSectionType.customText => 'Section',
-    RoutineSectionType.requestFeed => 'Request feed',
+    RoutineSectionType.requestFeed => 'Request Feed',
     RoutineSectionType.silence => 'Section',
     RoutineSectionType.readingPlaceholder => 'Section',
   };
 }
 
-class ConsolidatedRequestFeed extends StatelessWidget {
+class ConsolidatedRequestFeed extends ConsumerWidget {
   const ConsolidatedRequestFeed({super.key, required this.groups});
 
   final List<VesperGroup> groups;
 
   @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        for (final group in groups)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: RequestList(group: group, isLeader: false),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final repository = ref.watch(prayerRequestRepositoryProvider);
+    return StreamBuilder<List<ConsolidatedPrayerRequestItem>>(
+      stream: consolidatedRequestFeedStream(repository, groups),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          logRequestStreamError(snapshot.error, snapshot.stackTrace);
+          return const EmptyCard(text: 'We could not load requests.');
+        }
+        if (!snapshot.hasData) return const RequestFeedLoading();
+        final items = snapshot.data!;
+        if (items.isEmpty) return const EmptyCard(text: 'No requests yet.');
+        return StreamBuilder<Map<String, PrayerActivity>>(
+          stream: repository.watchPrayerActivityForRequests(
+            items.map((item) => item.request.id),
           ),
+          builder: (context, activitySnapshot) => ConsolidatedRequestCards(
+            items: items,
+            prayerActivityByRequest: activitySnapshot.data ?? const {},
+          ),
+        );
+      },
+    );
+  }
+}
+
+class ConsolidatedPrayerRequestItem {
+  const ConsolidatedPrayerRequestItem({
+    required this.request,
+    required this.groups,
+  });
+
+  final PrayerRequestSummary request;
+  final List<VesperGroup> groups;
+}
+
+Stream<List<ConsolidatedPrayerRequestItem>> consolidatedRequestFeedStream(
+  PrayerRequestRepository repository,
+  List<VesperGroup> groups,
+) {
+  if (groups.isEmpty) return Stream.value(const []);
+  late final StreamController<List<ConsolidatedPrayerRequestItem>> controller;
+  final latest = List<List<PrayerRequestSummary>?>.filled(groups.length, null);
+  final subscriptions = <StreamSubscription<List<PrayerRequestSummary>>>[];
+
+  void emitIfReady() {
+    if (latest.any((requests) => requests == null)) return;
+    controller.add(consolidateRequestItems(groups, latest.cast()));
+  }
+
+  controller = StreamController<List<ConsolidatedPrayerRequestItem>>(
+    onListen: () {
+      for (var index = 0; index < groups.length; index += 1) {
+        final group = groups[index];
+        subscriptions.add(
+          repository.watchRequests(group).listen((requests) {
+            latest[index] = requests;
+            emitIfReady();
+          }, onError: controller.addError),
+        );
+      }
+    },
+    onCancel: () async {
+      for (final subscription in subscriptions) {
+        await subscription.cancel();
+      }
+    },
+  );
+  return controller.stream;
+}
+
+List<ConsolidatedPrayerRequestItem> consolidateRequestItems(
+  List<VesperGroup> groups,
+  List<List<PrayerRequestSummary>> requestsByGroup,
+) {
+  final items = <String, ConsolidatedPrayerRequestItem>{};
+  final groupsById = {for (final group in groups) group.id: group};
+  for (final requests in requestsByGroup) {
+    for (final request in requests) {
+      final group = groupsById[request.groupId];
+      if (group == null) continue;
+      final existing = items[request.id];
+      if (existing == null) {
+        items[request.id] = ConsolidatedPrayerRequestItem(
+          request: request,
+          groups: [group],
+        );
+        continue;
+      }
+      if (existing.groups.any((itemGroup) => itemGroup.id == group.id)) {
+        continue;
+      }
+      items[request.id] = ConsolidatedPrayerRequestItem(
+        request: existing.request,
+        groups: [...existing.groups, group],
+      );
+    }
+  }
+  final sorted = items.values.toList()
+    ..sort((a, b) => b.request.createdAt.compareTo(a.request.createdAt));
+  return sorted;
+}
+
+class ConsolidatedRequestCards extends ConsumerWidget {
+  const ConsolidatedRequestCards({
+    super.key,
+    required this.items,
+    this.prayerActivityByRequest = const {},
+  });
+
+  final List<ConsolidatedPrayerRequestItem> items;
+  final Map<String, PrayerActivity> prayerActivityByRequest;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        ListView.separated(
+          shrinkWrap: true,
+          primary: false,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: items.length,
+          separatorBuilder: (context, index) => const SizedBox(height: 8),
+          itemBuilder: (context, index) {
+            final item = items[index];
+            return RequestCard(
+              group: item.groups.first,
+              groups: item.groups,
+              request: item.request,
+              isLeader: false,
+              prayerActivity: prayerActivityByRequest[item.request.id],
+              onReportRequest: () async {
+                await ref
+                    .read(prayerRequestRepositoryProvider)
+                    .reportRequestForGroups(item.groups, item.request.id);
+                if (context.mounted) {
+                  _showMessage(
+                    context,
+                    'This request was reported to Leaders.',
+                  );
+                }
+              },
+            );
+          },
+        ),
       ],
     );
   }
@@ -1115,7 +1386,7 @@ class GroupsTab extends ConsumerWidget {
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 20),
-            OutlinedButton.icon(
+            ElevatedButton.icon(
               onPressed: () => showModalBottomSheet<void>(
                 context: context,
                 isScrollControlled: true,
@@ -1132,11 +1403,12 @@ class GroupsTab extends ConsumerWidget {
             PinnedGroupsSection(
               groups: items,
               pinnedGroupIds: pinnedGroupIds,
-              builder: (group) => GroupCard(group: group),
+              builder: (group) => GroupCardListItem(group: group),
             ),
             if (unpinnedItems.isNotEmpty)
               Text('All Groups', style: Theme.of(context).textTheme.titleLarge),
-            for (final group in unpinnedItems) GroupCard(group: group),
+            const SizedBox(height: 12),
+            for (final group in unpinnedItems) GroupCardListItem(group: group),
           ],
         );
       },
@@ -1183,14 +1455,15 @@ class LegacyGroupsHomeScreen extends ConsumerWidget {
               PinnedGroupsSection(
                 groups: items,
                 pinnedGroupIds: pinnedGroupIds,
-                builder: (group) => GroupCard(group: group),
+                builder: (group) => GroupCardListItem(group: group),
               ),
               if (unpinnedItems.isNotEmpty)
                 Text(
                   'All Groups',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
-              for (final group in unpinnedItems) GroupCard(group: group),
+              for (final group in unpinnedItems)
+                GroupCardListItem(group: group),
             ],
           );
         },
@@ -1210,6 +1483,7 @@ class HomeHeader extends StatelessWidget implements PreferredSizeWidget {
   const HomeHeader({super.key});
 
   static const double height = 96;
+  static const double titleGraphicHeight = height * 0.81;
 
   @override
   Size get preferredSize => const Size.fromHeight(height);
@@ -1221,11 +1495,30 @@ class HomeHeader extends StatelessWidget implements PreferredSizeWidget {
       surfaceTintColor: Colors.transparent,
       toolbarHeight: height,
       centerTitle: true,
-      title: Image.asset(
-        'assets/title-graphic.png',
-        key: const Key('home-title-graphic'),
-        height: height,
-        fit: BoxFit.contain,
+      leading: Builder(
+        builder: (context) => IconButton(
+          onPressed: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const AppSettingsScreen()),
+          ),
+          icon: const Icon(Icons.settings_outlined),
+          tooltip: 'App Settings',
+        ),
+      ),
+      flexibleSpace: Builder(
+        builder: (context) => Padding(
+          padding: EdgeInsets.only(top: MediaQuery.paddingOf(context).top),
+          child: SizedBox(
+            height: height,
+            child: Center(
+              child: Image.asset(
+                'assets/title-graphic.png',
+                key: const Key('home-title-graphic'),
+                height: titleGraphicHeight,
+                fit: BoxFit.contain,
+              ),
+            ),
+          ),
+        ),
       ),
       actions: [
         Builder(
@@ -1242,6 +1535,354 @@ class HomeHeader extends StatelessWidget implements PreferredSizeWidget {
   }
 }
 
+class AppSettingsScreen extends StatelessWidget {
+  const AppSettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('App Settings')),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            Text('Theme', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 12),
+            const ThemeColorSelector(),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class ThemeColorSelector extends ConsumerWidget {
+  const ThemeColorSelector({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final preference =
+        ref.watch(themePreferenceProvider).value ??
+        const ThemePreference.liturgical();
+    final theme = Theme.of(context);
+    final brightness = theme.brightness;
+    final now = DateTime.now();
+    final defaultLiturgicalColor = brightness == Brightness.dark
+        ? AppTheme.darkForLiturgicalRite(
+            LiturgicalRite.anglican,
+            now,
+          ).colorScheme.primary
+        : AppTheme.lightForLiturgicalRite(
+            LiturgicalRite.anglican,
+            now,
+          ).colorScheme.primary;
+    final customColor = preference.customColor ?? defaultLiturgicalColor;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final option in AppTheme.liturgicalThemeOptions)
+          ThemeColorListItem(
+            key: Key('theme-option-liturgical-${option.id}'),
+            circleKey: Key('theme-option-liturgical-${option.id}-circle'),
+            selectedKey:
+                preference.mode == ThemeColorMode.liturgical &&
+                    (preference.liturgicalRite ?? LiturgicalRite.anglican) ==
+                        option.rite
+                ? Key('theme-option-liturgical-${option.id}-selected')
+                : null,
+            label: option.label,
+            color: brightness == Brightness.dark
+                ? AppTheme.darkForLiturgicalRite(
+                    option.rite,
+                    now,
+                  ).colorScheme.primary
+                : AppTheme.lightForLiturgicalRite(
+                    option.rite,
+                    now,
+                  ).colorScheme.primary,
+            icon: Icons.calendar_month_outlined,
+            isSelected:
+                preference.mode == ThemeColorMode.liturgical &&
+                (preference.liturgicalRite ?? LiturgicalRite.anglican) ==
+                    option.rite,
+            onTap: () => ref
+                .read(themePreferenceProvider.notifier)
+                .setLiturgicalRite(option.rite),
+          ),
+        for (final option in AppTheme.themeColorOptions)
+          ThemeColorListItem(
+            key: Key('theme-option-${option.id}'),
+            circleKey: Key('theme-option-${option.id}-circle'),
+            selectedKey:
+                preference.mode == ThemeColorMode.fixed &&
+                    preference.fixedOptionId == option.id
+                ? Key('theme-option-${option.id}-selected')
+                : null,
+            label: option.label,
+            color: brightness == Brightness.dark
+                ? option.darkColor
+                : option.lightColor,
+            isSelected:
+                preference.mode == ThemeColorMode.fixed &&
+                preference.fixedOptionId == option.id,
+            onTap: () =>
+                ref.read(themePreferenceProvider.notifier).setFixed(option.id),
+          ),
+        ThemeColorListItem(
+          key: const Key('theme-option-custom'),
+          circleKey: const Key('theme-option-custom-circle'),
+          selectedKey: preference.mode == ThemeColorMode.custom
+              ? const Key('theme-option-custom-selected')
+              : null,
+          label: 'Custom',
+          color: customColor,
+          icon: Icons.brush_outlined,
+          isSelected: preference.mode == ThemeColorMode.custom,
+          onTap: () => showModalBottomSheet<void>(
+            context: context,
+            isScrollControlled: true,
+            builder: (_) => ThemeColorPickerSheet(initialColor: customColor),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class ThemeColorListItem extends StatelessWidget {
+  const ThemeColorListItem({
+    super.key,
+    required this.circleKey,
+    this.selectedKey,
+    required this.label,
+    required this.color,
+    this.icon,
+    this.gradient,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final Key circleKey;
+  final Key? selectedKey;
+  final String label;
+  final Color color;
+  final IconData? icon;
+  final Gradient? gradient;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final iconColor =
+        ThemeData.estimateBrightnessForColor(color) == Brightness.dark
+        ? Colors.white
+        : Colors.black;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Tooltip(
+        message: '$label theme',
+        child: Semantics(
+          label: '$label theme',
+          button: true,
+          selected: isSelected,
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(18),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(18),
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: isSelected
+                                ? colorScheme.onSurface
+                                : colorScheme.outline,
+                            width: isSelected ? 3 : 1,
+                          ),
+                        ),
+                        child: Center(
+                          child: DecoratedBox(
+                            key: circleKey,
+                            decoration: BoxDecoration(
+                              color: gradient == null ? color : null,
+                              gradient: gradient,
+                              shape: BoxShape.circle,
+                            ),
+                            child: SizedBox(
+                              width: 36,
+                              height: 36,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  if (icon != null)
+                                    Icon(icon, color: iconColor, size: 20),
+                                  if (isSelected)
+                                    Align(
+                                      alignment: icon == null
+                                          ? Alignment.center
+                                          : Alignment.bottomRight,
+                                      child: Icon(
+                                        Icons.check,
+                                        key: selectedKey,
+                                        color: iconColor,
+                                        size: icon == null ? 20 : 14,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        label,
+                        style: Theme.of(context).textTheme.bodyLarge,
+                      ),
+                    ),
+                    if (isSelected)
+                      Icon(
+                        Icons.check_circle_outline,
+                        color: colorScheme.primary,
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class ThemeColorPickerSheet extends ConsumerStatefulWidget {
+  const ThemeColorPickerSheet({super.key, required this.initialColor});
+
+  final Color initialColor;
+
+  @override
+  ConsumerState<ThemeColorPickerSheet> createState() =>
+      _ThemeColorPickerSheetState();
+}
+
+class _ThemeColorPickerSheetState extends ConsumerState<ThemeColorPickerSheet> {
+  late Color _selectedColor;
+  late Color _settledColor;
+  bool _isChoosingColor = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedColor = widget.initialColor;
+    _settledColor = widget.initialColor;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final needsReadableBackground =
+        !_isChoosingColor &&
+        _contrastRatio(_settledColor, colorScheme.surface) < 4.5;
+
+    return SafeArea(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          24,
+          24,
+          24,
+          MediaQuery.of(context).viewInsets.bottom + 24,
+        ),
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            Text('Custom Color', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 8),
+            Text(
+              'Choose an accent color for Vesper.',
+              style: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 16),
+            Listener(
+              key: const Key('custom-color-picker-interaction'),
+              onPointerDown: (_) => setState(() => _isChoosingColor = true),
+              onPointerUp: (_) => _settleSelectedColor(),
+              onPointerCancel: (_) => _settleSelectedColor(),
+              child: ColorPicker(
+                pickerColor: _selectedColor,
+                onColorChanged: (color) =>
+                    setState(() => _selectedColor = color),
+                enableAlpha: false,
+                portraitOnly: true,
+                pickerAreaHeightPercent: 0.65,
+                labelTypes: const [],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    await ref
+                        .read(themePreferenceProvider.notifier)
+                        .setCustom(_selectedColor);
+                    if (context.mounted) Navigator.of(context).pop();
+                  },
+                  child: const Text('Use color'),
+                ),
+                if (needsReadableBackground)
+                  Text(
+                    'Some backgrounds will adjust for readability.',
+                    key: const Key('custom-color-readability-warning'),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _settleSelectedColor() {
+    setState(() {
+      _isChoosingColor = false;
+      _settledColor = _selectedColor;
+    });
+  }
+
+  double _contrastRatio(Color foreground, Color background) {
+    final foregroundLuminance = foreground.computeLuminance();
+    final backgroundLuminance = background.computeLuminance();
+    final lighter = foregroundLuminance > backgroundLuminance
+        ? foregroundLuminance
+        : backgroundLuminance;
+    final darker = foregroundLuminance > backgroundLuminance
+        ? backgroundLuminance
+        : foregroundLuminance;
+    return (lighter + 0.05) / (darker + 0.05);
+  }
+}
+
 class HomeGroupFab extends StatelessWidget {
   const HomeGroupFab({super.key, required this.onPressed});
 
@@ -1249,8 +1890,11 @@ class HomeGroupFab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return FloatingActionButton(
       onPressed: onPressed,
+      backgroundColor: colorScheme.primary,
+      foregroundColor: colorScheme.onPrimary,
       tooltip: 'Create or join group',
       child: const Icon(Icons.group_add_outlined),
     );
@@ -1290,6 +1934,7 @@ class GroupCard extends ConsumerWidget {
         'Leaving groups will be added with membership safeguards.',
       ),
       child: ManuscriptCard(
+        innerBorder: true,
         child: StreamBuilder<int>(
           stream: repository.watchRequestCount(group.id),
           builder: (context, snapshot) {
@@ -1299,7 +1944,7 @@ class GroupCard extends ConsumerWidget {
               title: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const RubricText('Private group'),
+                  const RubricText('Private Group'),
                   const SizedBox(height: 6),
                   Text(
                     group.name,
@@ -1328,6 +1973,20 @@ class GroupCard extends ConsumerWidget {
           },
         ),
       ),
+    );
+  }
+}
+
+class GroupCardListItem extends StatelessWidget {
+  const GroupCardListItem({super.key, required this.group});
+
+  final VesperGroup group;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: GroupCard(group: group),
     );
   }
 }
@@ -1524,7 +2183,7 @@ class _GroupActionsSheetState extends ConsumerState<GroupActionsSheet> {
       child: ListView(
         shrinkWrap: true,
         children: [
-          Text('Create a group', style: Theme.of(context).textTheme.titleLarge),
+          Text('Create a Group', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 12),
           TextField(
             controller: _name,
@@ -1858,7 +2517,7 @@ class _PrayerComposerSheetState extends ConsumerState<PrayerComposerSheet> {
     final selectedGroups = _groups
         .where((group) => _selectedGroupIds.contains(group.id))
         .toList();
-    if (selectedGroups.isEmpty) {
+    if (selectedGroups.isEmpty && !_showGroupSelector) {
       _showMessage(context, 'Choose at least one group to share this request.');
       return;
     }
@@ -1869,9 +2528,15 @@ class _PrayerComposerSheetState extends ConsumerState<PrayerComposerSheet> {
       final createRequest = widget.onCreateRequest;
       if (createRequest == null) {
         final repository = ref.read(prayerRequestRepositoryProvider);
-        for (final group in selectedGroups) {
-          await repository.createRequest(
-            group: group,
+        if (selectedGroups.isEmpty) {
+          await repository.createPrivateRequest(
+            title: _title.text,
+            body: body,
+            bodyDeltaJson: bodyDeltaJson,
+          );
+        } else {
+          await repository.createRequestForGroups(
+            groups: selectedGroups,
             title: _title.text,
             body: body,
             bodyDeltaJson: bodyDeltaJson,
@@ -1892,12 +2557,18 @@ class _PrayerComposerSheetState extends ConsumerState<PrayerComposerSheet> {
           const SnackBar(content: Text('Shared with your group.')),
         );
       }
-    } on Exception {
+    } on Exception catch (error, stackTrace) {
+      logRequestSaveError(error, stackTrace);
       if (mounted) _showMessage(context, 'This request could not be saved.');
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
+}
+
+void logRequestSaveError(Object error, StackTrace stackTrace) {
+  debugPrint('Request save error type: ${error.runtimeType}');
+  debugPrint('Request save stack: $stackTrace');
 }
 
 class RequestList extends ConsumerWidget {
@@ -1917,13 +2588,15 @@ class RequestList extends ConsumerWidget {
             text: 'We could not load requests for ${group.name}.',
           );
         }
+        if (!snapshot.hasData) return const RequestFeedLoading();
+        final requests = snapshot.data!;
         return StreamBuilder<Map<String, PrayerActivity>>(
           stream: ref
               .watch(prayerRequestRepositoryProvider)
               .watchPrayerActivity(group.id),
           builder: (context, activitySnapshot) => RequestCards(
             group: group,
-            requests: snapshot.data ?? const [],
+            requests: requests,
             isLeader: isLeader,
             offline: false,
             prayerActivityByRequest: activitySnapshot.data ?? const {},
@@ -2002,6 +2675,7 @@ class RequestCard extends ConsumerWidget {
   const RequestCard({
     super.key,
     required this.group,
+    this.groups,
     required this.request,
     required this.isLeader,
     this.currentUserId,
@@ -2013,13 +2687,14 @@ class RequestCard extends ConsumerWidget {
   });
 
   final VesperGroup group;
+  final List<VesperGroup>? groups;
   final PrayerRequestSummary request;
   final bool isLeader;
   final String? currentUserId;
   final PrayerActivity? prayerActivity;
   final VoidCallback? onJoinPrayer;
   final VoidCallback? onDoubleTapPrayed;
-  final VoidCallback? onReportRequest;
+  final FutureOr<void> Function()? onReportRequest;
   final VoidCallback? onRemoveRequest;
 
   @override
@@ -2040,9 +2715,10 @@ class RequestCard extends ConsumerWidget {
         final activity =
             prayerActivity ??
             const PrayerActivity(prayedCount: 0, hasCurrentUserPrayed: false);
+        final displayGroups = groups ?? [group];
+        final groupNames = displayGroups.map((group) => group.name).join(' · ');
         return ManuscriptCard(
           innerBorder: true,
-          accentColor: Theme.of(context).colorScheme.primary,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -2063,10 +2739,7 @@ class RequestCard extends ConsumerWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              RubricText(
-                                group.name,
-                                color: Theme.of(context).colorScheme.tertiary,
-                              ),
+                              RubricText(groupNames),
                               const SizedBox(height: 6),
                               Text(
                                 request.title,
@@ -2118,7 +2791,7 @@ class RequestCard extends ConsumerWidget {
                             }
                             if (value == 'report') {
                               if (onReportRequest != null) {
-                                onReportRequest!.call();
+                                await onReportRequest!.call();
                                 return;
                               }
                               await ref
@@ -2292,7 +2965,7 @@ Future<void> _confirmRemoveRequest(
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (context) => AlertDialog(
-      title: const Text('Remove request?'),
+      title: const Text('Remove Request?'),
       content: const Text('This will remove the request from the group feed.'),
       actions: [
         TextButton(
@@ -2366,7 +3039,7 @@ class _RequestUpdateSheetState extends ConsumerState<RequestUpdateSheet> {
       child: ListView(
         shrinkWrap: true,
         children: [
-          Text('Update request', style: Theme.of(context).textTheme.titleLarge),
+          Text('Update Request', style: Theme.of(context).textTheme.titleLarge),
           const SizedBox(height: 12),
           TextField(
             controller: _title,
@@ -2461,9 +3134,9 @@ class GroupManagement extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const RubricText('Care notes'),
+          const RubricText('Care Notes'),
           const SizedBox(height: 6),
-          Text('Group care', style: Theme.of(context).textTheme.titleLarge),
+          Text('Group Care', style: Theme.of(context).textTheme.titleLarge),
           const IlluminatedDivider(compact: true),
           if (isLeader) ...[
             Text(
@@ -2875,7 +3548,7 @@ class JoinRequestSettingsSection extends StatelessWidget {
         children: [
           const RubricText('Leaders'),
           const SizedBox(height: 6),
-          Text('Join requests', style: Theme.of(context).textTheme.titleLarge),
+          Text('Join Requests', style: Theme.of(context).textTheme.titleLarge),
           const IlluminatedDivider(compact: true),
           if (requests.isEmpty)
             Text(
@@ -2933,10 +3606,10 @@ class RequestReportSettingsSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const RubricText('Care review'),
+          const RubricText('Care Review'),
           const SizedBox(height: 6),
           Text(
-            'Reported requests',
+            'Reported Requests',
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const IlluminatedDivider(compact: true),
@@ -3083,7 +3756,7 @@ class MemberSettingsList extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const RubricText('Group book'),
+        const RubricText('Group Book'),
         const SizedBox(height: 6),
         Text('Members', style: Theme.of(context).textTheme.titleLarge),
         const IlluminatedDivider(compact: true),
@@ -3185,10 +3858,10 @@ class SettingsChangeSettingsSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const RubricText('Leader review'),
+          const RubricText('Leader Review'),
           const SizedBox(height: 6),
           Text(
-            'Pending changes',
+            'Pending Changes',
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const IlluminatedDivider(compact: true),
@@ -3257,12 +3930,14 @@ class ProfileScreen extends ConsumerStatefulWidget {
     super.key,
     this.initialDisplayName,
     this.requests,
+    this.requestGroups = const {},
     this.onSaveName,
     this.onLogout,
   });
 
   final String? initialDisplayName;
   final List<PrayerRequestSummary>? requests;
+  final Map<String, VesperGroup> requestGroups;
   final Future<void> Function(String name)? onSaveName;
   final Future<void> Function()? onLogout;
 
@@ -3272,7 +3947,13 @@ class ProfileScreen extends ConsumerStatefulWidget {
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   late final TextEditingController _name;
+  bool _editingName = false;
   bool _busy = false;
+
+  String get _displayName {
+    final trimmed = _name.text.trim();
+    return trimmed.isEmpty ? 'Someone' : trimmed;
+  }
 
   @override
   void initState() {
@@ -3298,35 +3979,62 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         child: ListView(
           padding: const EdgeInsets.all(20),
           children: [
-            Text(
-              'Your profile',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _name,
-              decoration: const InputDecoration(labelText: 'Name'),
-              textInputAction: TextInputAction.done,
-            ),
-            const SizedBox(height: 12),
-            ElevatedButton(
-              onPressed: _busy ? null : _saveName,
-              child: const Text('Save name'),
-            ),
+            if (_editingName)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: _name,
+                    decoration: const InputDecoration(labelText: 'Name'),
+                    textInputAction: TextInputAction.done,
+                    onSubmitted: (_) {
+                      if (!_busy) _saveName();
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed: _busy ? null : _saveName,
+                    child: const Text('Save name'),
+                  ),
+                ],
+              )
+            else
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      _displayName,
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Edit name',
+                    onPressed: _busy
+                        ? null
+                        : () => setState(() => _editingName = true),
+                    icon: const Icon(Icons.edit_outlined),
+                  ),
+                ],
+              ),
             const SizedBox(height: 32),
             Text(
-              'Your prayer requests',
+              'Your Prayer Requests',
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 12),
             if (widget.requests != null)
-              ProfileRequestList(requests: widget.requests!)
+              ProfileRequestList(
+                requests: widget.requests!,
+                groupsById: widget.requestGroups,
+                currentUserId: widget.requests!.firstOrNull?.createdBy,
+              )
             else
               const MyPrayerRequestsAcrossGroups(),
             const SizedBox(height: 32),
-            OutlinedButton(
+            ElevatedButton(
               onPressed: _busy ? null : _logout,
-              child: const Text('Log out'),
+              child: const Text('Log Out'),
             ),
           ],
         ),
@@ -3342,7 +4050,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       } else {
         await ref.read(authRepositoryProvider).updateDisplayName(_name.text);
       }
-      if (mounted) _showMessage(context, 'Name updated.');
+      if (mounted) {
+        setState(() => _editingName = false);
+        _showMessage(context, 'Name updated.');
+      }
     } on Exception {
       if (mounted) _showMessage(context, 'We could not update your name.');
     } finally {
@@ -3374,18 +4085,33 @@ class MyPrayerRequestsAcrossGroups extends ConsumerWidget {
     if (userId == null) {
       return const EmptyCard(text: 'Sign in to see your requests.');
     }
-    return StreamBuilder<List<VesperGroup>>(
-      stream: ref.watch(groupRepositoryProvider).watchMyGroups(),
+    return MyPrayerRequestsForUser(userId: userId);
+  }
+}
+
+class MyPrayerRequestsForUser extends ConsumerWidget {
+  const MyPrayerRequestsForUser({super.key, required this.userId});
+
+  final String userId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return StreamBuilder<List<PrayerRequestSummary>>(
+      stream: ref.watch(prayerRequestRepositoryProvider).watchMyRequests(),
       builder: (context, snapshot) {
-        final groups = snapshot.data ?? const <VesperGroup>[];
-        if (groups.isEmpty) {
+        if (snapshot.hasError) {
+          logRequestStreamError(snapshot.error, snapshot.stackTrace);
+          return const EmptyCard(text: 'We could not load your requests.');
+        }
+        if (!snapshot.hasData) return const RequestFeedLoading();
+        final requests = snapshot.data!;
+        if (requests.isEmpty) {
           return const EmptyCard(text: 'Your requests will appear here.');
         }
-        return Column(
-          children: [
-            for (final group in groups)
-              MyPrayerRequestsForGroup(group: group, userId: userId),
-          ],
+        return ProfileRequestList(
+          requests: requests,
+          groupsById: const {},
+          currentUserId: userId,
         );
       },
     );
@@ -3407,7 +4133,12 @@ class MyPrayerRequestsForGroup extends ConsumerWidget {
     return StreamBuilder<List<PrayerRequestSummary>>(
       stream: ref.watch(prayerRequestRepositoryProvider).watchRequests(group),
       builder: (context, snapshot) {
-        final requests = (snapshot.data ?? const <PrayerRequestSummary>[])
+        if (snapshot.hasError) {
+          logRequestStreamError(snapshot.error, snapshot.stackTrace);
+          return EmptyCard(text: 'We could not load requests for ${group.name}.');
+        }
+        if (!snapshot.hasData) return const RequestFeedLoading();
+        final requests = snapshot.data!
             .where((request) => request.createdBy == userId)
             .toList();
         if (requests.isEmpty) return const SizedBox.shrink();
@@ -3415,7 +4146,13 @@ class MyPrayerRequestsForGroup extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(group.name, style: Theme.of(context).textTheme.bodyMedium),
-            ProfileRequestList(requests: requests),
+            RequestCards(
+              group: group,
+              requests: requests,
+              isLeader: false,
+              offline: false,
+              currentUserId: userId,
+            ),
           ],
         );
       },
@@ -3424,27 +4161,44 @@ class MyPrayerRequestsForGroup extends ConsumerWidget {
 }
 
 class ProfileRequestList extends StatelessWidget {
-  const ProfileRequestList({super.key, required this.requests});
+  const ProfileRequestList({
+    super.key,
+    required this.requests,
+    required this.groupsById,
+    this.currentUserId,
+  });
 
   final List<PrayerRequestSummary> requests;
+  final Map<String, VesperGroup> groupsById;
+  final String? currentUserId;
 
   @override
   Widget build(BuildContext context) {
-    if (requests.isEmpty) {
+    final canonicalRequests = <String, PrayerRequestSummary>{};
+    for (final request in requests) {
+      canonicalRequests.putIfAbsent(request.id, () => request);
+    }
+    final dedupedRequests = canonicalRequests.values.toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    if (dedupedRequests.isEmpty) {
       return const EmptyCard(text: 'Your requests will appear here.');
     }
     return Column(
       children: [
-        for (final request in requests)
-          ManuscriptCard(
-            padding: const EdgeInsets.all(8),
-            child: ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-              title: Text(request.title),
-              subtitle: Text(
-                '${request.status.replaceAll('_', ' ')} · ${DateFormat.MMMd().format(request.createdAt)}',
-              ),
-            ),
+        for (final request in dedupedRequests)
+          RequestCard(
+            group:
+                groupsById[request.groupId] ??
+                VesperGroup(
+                  id: request.groupId,
+                  name: 'Group',
+                  description: '',
+                  createdBy: '',
+                  activeKeyVersion: 1,
+                ),
+            request: request,
+            isLeader: false,
+            currentUserId: currentUserId,
           ),
       ],
     );
@@ -3490,6 +4244,20 @@ class EmptyCard extends StatelessWidget {
           const IlluminatedDivider(compact: true),
           Text(text, style: Theme.of(context).textTheme.bodyMedium),
         ],
+      ),
+    );
+  }
+}
+
+class RequestFeedLoading extends StatelessWidget {
+  const RequestFeedLoading({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Semantics(
+        label: 'Loading requests',
+        child: const CircularProgressIndicator(),
       ),
     );
   }

@@ -64,7 +64,7 @@ pending_writes
 sync_cursors
 ```
 
-Cached request records should preserve remote IDs, group IDs, key versions, ciphertext, nonce, timestamps, and local sync state.
+Cached request records should preserve canonical request IDs, share group IDs where applicable, key versions, ciphertext, nonce, timestamps, request key grant metadata, and local sync state.
 
 Cached routine and personal prayer records should preserve remote IDs, owner user ID, payload version, ciphertext, nonce, timestamps, ordering metadata, and local sync state. Decrypt only when rendering the prayer routine or editing a prayer book entry.
 
@@ -76,21 +76,21 @@ Pending writes should be stored locally as encrypted operations.
 {
   "operationId": "uuid",
   "type": "create_prayer_request",
-  "groupId": "groupId",
+  "groupIds": ["groupId"],
   "createdAt": "timestamp",
   "attemptCount": 0,
   "state": "pending",
   "encryptedPayload": {
     "ciphertext": "base64",
     "nonce": "base64",
-    "keyVersion": 3
+    "keyVersion": 1
   }
 }
 ```
 
-Do not store plaintext drafts in local storage unless the storage layer is encrypted and the product explicitly accepts the risk. Prefer encrypting drafts with the active group key before persistence.
+Do not store plaintext drafts in local storage unless the storage layer is encrypted and the product explicitly accepts the risk. Prefer encrypting drafts with a generated request content key before persistence.
 
-Multi-group request submission should be represented as one pending encrypted write per selected group. Each pending write must use that group's active key version. If some writes succeed and others fail, keep the failed group writes retryable without undoing successful submissions.
+Multi-group request submission should be represented as one pending canonical encrypted request write plus one pending share/key-grant operation per selected group. If some share or grant writes fail, keep failed group-share work retryable without duplicating the canonical request.
 
 Routine edits and personal prayer edits should also be queued as encrypted operations. Private custom text, routine names, and prayer book content must not be written to a plaintext local queue.
 
@@ -101,16 +101,17 @@ Routine edits and personal prayer edits should also be queued as encrypted opera
 1. Fetch active memberships.
 2. Fetch assigned encrypted group keys.
 3. Decrypt and cache usable group keys locally.
-4. Fetch recent request metadata and ciphertext by group.
-5. Fetch user prayer sessions, routine sections, personal prayers, and shared routines assigned to the user.
-6. Store encrypted records locally.
-7. Decrypt only when rendering UI.
+4. Fetch recent request share metadata by group.
+5. Fetch canonical request metadata, ciphertext, and the current user's request key grants.
+6. Fetch user prayer sessions, routine sections, personal prayers, and shared routines assigned to the user.
+7. Store encrypted records locally.
+8. Decrypt only when rendering UI.
 
 ### Incremental Sync
 
 Use group-scoped cursors based on `updatedAt` or snapshot listeners. Keep sync windows narrow and paginate historical data.
 
-The consolidated request organizer should be assembled locally from active memberships, cached group-scoped request records, and on-device decryption. Do not introduce backend global feed sync cursors.
+The consolidated request organizer should be assembled locally from active memberships, cached request shares, canonical request records, request key grants, and on-device decryption. Do not introduce backend plaintext feed assembly.
 
 ### Write Replay
 

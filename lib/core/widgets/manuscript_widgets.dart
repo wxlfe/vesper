@@ -5,25 +5,21 @@ class ManuscriptCard extends StatelessWidget {
     super.key,
     required this.child,
     this.padding = const EdgeInsets.all(20),
-    this.accentColor,
     this.innerBorder = false,
   });
 
   final Widget child;
   final EdgeInsetsGeometry padding;
-  final Color? accentColor;
   final bool innerBorder;
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    final outline = colorScheme.outline;
-    final accent = accentColor ?? colorScheme.secondary;
+    final borderColor = colorScheme.secondary.withValues(alpha: 0.45);
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: outline),
+        border: Border.all(color: borderColor),
         boxShadow: [
           BoxShadow(
             color: colorScheme.shadow.withValues(alpha: 0.04),
@@ -32,16 +28,18 @@ class ManuscriptCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(4),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: innerBorder
-                ? Border.all(color: accent.withValues(alpha: 0.45))
-                : null,
+      child: Material(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(24),
+        child: Padding(
+          padding: const EdgeInsets.all(4),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              border: innerBorder ? Border.all(color: borderColor) : null,
+            ),
+            child: Padding(padding: padding, child: child),
           ),
-          child: Padding(padding: padding, child: child),
         ),
       ),
     );
@@ -57,13 +55,60 @@ class RubricText extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Text(
+    final colorScheme = theme.colorScheme;
+    final accent = color ?? colorScheme.primary;
+    return ReadableAccentText(
       text.toUpperCase(),
-      style: theme.textTheme.labelLarge?.copyWith(
-        color: color ?? theme.colorScheme.primary,
-        letterSpacing: 1.1,
+      color: accent,
+      style: theme.textTheme.labelLarge?.copyWith(letterSpacing: 1.1),
+      backgroundKey: const Key('rubric-text-readable-background'),
+    );
+  }
+}
+
+class ReadableAccentText extends StatelessWidget {
+  const ReadableAccentText(
+    this.text, {
+    super.key,
+    required this.color,
+    this.style,
+    this.backgroundKey,
+  });
+
+  final String text;
+  final Color color;
+  final TextStyle? style;
+  final Key? backgroundKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final label = Text(text, style: style?.copyWith(color: color));
+    if (_contrastRatio(color, colorScheme.surface) >= 4.5) return label;
+
+    return DecoratedBox(
+      key: backgroundKey,
+      decoration: BoxDecoration(
+        color: colorScheme.onSurface,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+        child: label,
       ),
     );
+  }
+
+  double _contrastRatio(Color foreground, Color background) {
+    final foregroundLuminance = foreground.computeLuminance();
+    final backgroundLuminance = background.computeLuminance();
+    final lighter = foregroundLuminance > backgroundLuminance
+        ? foregroundLuminance
+        : backgroundLuminance;
+    final darker = foregroundLuminance > backgroundLuminance
+        ? backgroundLuminance
+        : foregroundLuminance;
+    return (lighter + 0.05) / (darker + 0.05);
   }
 }
 

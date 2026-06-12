@@ -257,7 +257,7 @@ Purpose:
 
 The `Pray` tab should avoid dashboard clutter and social-media-style urgency. Routines should appear first in a horizontal row of circular icons with short labels, visually similar to the layout pattern of Stories but without social-story mechanics. Do not use viewers, public rings, expiration, reactions, streaks, or engagement indicators.
 
-The `Create Routine` action should remain visible whether the user has routines or not. Below the routines row, the consolidated request feed should show prayer requests from all groups where the user is an active member. This feed is private to the viewing user, assembled client-side from group-scoped reads, and must not become a backend global feed.
+The `Create Routine` action should remain visible whether the user has routines or not. Below the routines row, the consolidated request feed should show prayer requests from all groups where the user is an active member. This feed is private to the viewing user, assembled client-side from group-scoped reads, and must not become a backend global feed. If the same canonical request is visible through multiple groups, show it once, keyed by `requestId`, and display all relevant group names on the request card.
 
 ### Request Composer
 
@@ -292,7 +292,7 @@ Group management should include invite codes, join requests, member roles, membe
 
 ### Profile
 
-The Profile screen should be available from the home header. It should let the user manage their display name, review their own prayer requests across groups, and sign out from a low-emphasis logout button near the bottom of the screen.
+The Profile screen should be available from the home header. It should let the user manage their display name, review their own prayer requests across groups, and sign out from a low-emphasis logout button near the bottom of the screen. The profile request feed is canonical and user-owned: show one entry per `requestId` for the user's active, answered, resolved, and archived requests, excluding deleted requests.
 
 ### Prayer Request Detail
 

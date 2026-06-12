@@ -13,6 +13,14 @@ service cloud.firestore {
       return /databases/$(database)/documents/group_members/$(groupId + '_' + userId);
     }
 
+    function requestSharePath(requestId, groupId) {
+      return /databases/$(database)/documents/request_shares/$(requestId + '_' + groupId);
+    }
+
+    function requestKeyGrantPath(requestId, userId) {
+      return /databases/$(database)/documents/request_key_grants/$(requestId + '_' + userId);
+    }
+
     function isActiveMember(groupId) {
       return signedIn()
         && exists(membershipPath(groupId, request.auth.uid))
@@ -22,6 +30,15 @@ service cloud.firestore {
     function isLeader(groupId) {
       return isActiveMember(groupId)
         && get(membershipPath(groupId, request.auth.uid)).data.role == 'leader';
+    }
+
+    function isActiveMemberUser(groupId, userId) {
+      return exists(membershipPath(groupId, userId))
+        && get(membershipPath(groupId, userId)).data.status == 'active';
+    }
+
+    function hasRequestGrant(requestId) {
+      return signedIn() && exists(requestKeyGrantPath(requestId, request.auth.uid));
     }
 
     function validEncryptedPayload(data) {
@@ -34,6 +51,41 @@ service cloud.firestore {
         && data.keyVersion is int
         && data.payloadVersion is int
         && data.algorithm is string;
+    }
+
+    function validCanonicalRequest(data) {
+      return data.keys().hasOnly(['createdBy', 'createdAt', 'updatedAt', 'status', 'anonymous', 'keyVersion', 'payloadVersion', 'algorithm', 'ciphertext', 'nonce', 'metadata'])
+        && data.createdBy is string
+        && data.status in ['active', 'answered', 'resolved', 'archived', 'deleted']
+        && data.anonymous is bool
+        && data.metadata is map
+        && data.metadata.keys().hasOnly(['hasFollowup', 'hasReminder', 'followUpAt', 'updateCount'])
+        && data.metadata.hasFollowup is bool
+        && data.metadata.hasReminder is bool
+        && data.metadata.updateCount is int
+        && validEncryptedPayload(data);
+    }
+
+    function validRequestShare(data) {
+      return data.keys().hasOnly(['requestId', 'groupId', 'sharedBy', 'sharedAt', 'status', 'removedAt', 'removedBy'])
+        && data.requestId is string
+        && data.groupId is string
+        && data.sharedBy is string
+        && data.status in ['active', 'removed', 'deleted'];
+    }
+
+    function validRequestKeyGrant(data) {
+      return data.keys().hasOnly(['requestId', 'userId', 'grantedBy', 'grantedViaGroupId', 'createdAt', 'encryptedGroupKey', 'nonce', 'ephemeralPublicKey', 'algorithm'])
+        && data.requestId is string
+        && data.userId is string
+        && data.grantedBy is string
+        && (data.grantedViaGroupId == null || data.grantedViaGroupId is string)
+        && data.encryptedGroupKey is string
+        && data.encryptedGroupKey.size() > 0
+        && data.encryptedGroupKey.size() < 4096
+        && data.nonce is string
+        && data.ephemeralPublicKey is string
+        && data.algorithm == 'x25519-xchacha20-poly1305';
     }
 
     function validGroup(data) {
@@ -153,28 +205,79 @@ service cloud.firestore {
     }
 
     match /prayer_requests/{requestId} {
-      allow read: if isActiveMember(resource.data.groupId)
-        && (resource.data.status in ['active', 'answered', 'resolved', 'archived']
-          || resource.data.createdBy == request.auth.uid
-          || isLeader(resource.data.groupId));
-      allow create: if isActiveMember(request.resource.data.groupId)
+      allow read: if signedIn()
+        && (resource.data.createdBy == request.auth.uid || hasRequestGrant(requestId));
+      allow create: if signedIn()
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.status == 'active'
-        && validEncryptedPayload(request.resource.data);
-      allow update: if isActiveMember(resource.data.groupId)
-        && (isLeader(resource.data.groupId) || resource.data.createdBy == request.auth.uid)
-        && request.resource.data.groupId == resource.data.groupId
+        && validCanonicalRequest(request.resource.data);
+      allow update: if signedIn()
+        && resource.data.createdBy == request.auth.uid
         && request.resource.data.createdBy == resource.data.createdBy
-        && request.resource.data.status in ['pending_approval', 'active', 'answered', 'resolved', 'archived', 'deleted']
-        && validEncryptedPayload(request.resource.data);
+        && request.resource.data.status in ['active', 'answered', 'resolved', 'archived', 'deleted']
+        && validCanonicalRequest(request.resource.data);
       allow delete: if false;
     }
 
-    match /prayer_actions/{actionId} {
+    match /request_shares/{shareId} {
       allow read: if isActiveMember(resource.data.groupId);
-      allow create: if isActiveMember(request.resource.data.groupId)
+      allow create: if signedIn()
+        && validRequestShare(request.resource.data)
+        && request.resource.data.status == 'active'
+        && request.resource.data.sharedBy == request.auth.uid
+        && isActiveMember(request.resource.data.groupId)
+        && existsAfter(/databases/$(database)/documents/prayer_requests/$(request.resource.data.requestId))
+        && getAfter(/databases/$(database)/documents/prayer_requests/$(request.resource.data.requestId)).data.createdBy == request.auth.uid;
+      allow update: if isLeader(resource.data.groupId)
+        && validRequestShare(request.resource.data)
+        && request.resource.data.requestId == resource.data.requestId
+        && request.resource.data.groupId == resource.data.groupId
+        && request.resource.data.sharedBy == resource.data.sharedBy
+        && request.resource.data.status in ['removed', 'deleted'];
+      allow delete: if false;
+    }
+
+    match /request_key_grants/{grantId} {
+      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      allow create: if signedIn()
+        && validRequestKeyGrant(request.resource.data)
+        && request.resource.data.grantedBy == request.auth.uid
+        && existsAfter(/databases/$(database)/documents/prayer_requests/$(request.resource.data.requestId))
+        && (
+          (
+            request.resource.data.userId == request.auth.uid
+            && request.resource.data.grantedViaGroupId == null
+            && getAfter(/databases/$(database)/documents/prayer_requests/$(request.resource.data.requestId)).data.createdBy == request.auth.uid
+          )
+          ||
+          (
+            getAfter(/databases/$(database)/documents/prayer_requests/$(request.resource.data.requestId)).data.createdBy == request.auth.uid
+            && request.resource.data.grantedViaGroupId is string
+            && isActiveMember(request.resource.data.grantedViaGroupId)
+            && isActiveMemberUser(request.resource.data.grantedViaGroupId, request.resource.data.userId)
+            && existsAfter(requestSharePath(request.resource.data.requestId, request.resource.data.grantedViaGroupId))
+            && getAfter(requestSharePath(request.resource.data.requestId, request.resource.data.grantedViaGroupId)).data.status == 'active'
+          )
+          ||
+          (
+            request.resource.data.grantedViaGroupId is string
+            && isLeader(request.resource.data.grantedViaGroupId)
+            && isActiveMemberUser(request.resource.data.grantedViaGroupId, request.resource.data.userId)
+            && existsAfter(requestSharePath(request.resource.data.requestId, request.resource.data.grantedViaGroupId))
+            && getAfter(requestSharePath(request.resource.data.requestId, request.resource.data.grantedViaGroupId)).data.status == 'active'
+            && exists(requestKeyGrantPath(request.resource.data.requestId, request.auth.uid))
+          )
+        );
+      allow update, delete: if false;
+    }
+
+    match /prayer_actions/{actionId} {
+      allow read: if hasRequestGrant(resource.data.requestId);
+      allow create: if hasRequestGrant(request.resource.data.requestId)
         && request.resource.data.userId == request.auth.uid
-        && request.resource.data.type == 'prayed';
+        && request.resource.data.type == 'prayed'
+        && request.resource.data.keys().hasOnly(['requestId', 'userId', 'type', 'createdAt'])
+        && request.resource.data.requestId is string;
       allow update, delete: if false;
     }
 
@@ -187,7 +290,8 @@ service cloud.firestore {
         && request.resource.data.groupId is string
         && request.resource.data.requestId is string
         && exists(/databases/$(database)/documents/prayer_requests/$(request.resource.data.requestId))
-        && get(/databases/$(database)/documents/prayer_requests/$(request.resource.data.requestId)).data.groupId == request.resource.data.groupId
+        && exists(requestSharePath(request.resource.data.requestId, request.resource.data.groupId))
+        && get(requestSharePath(request.resource.data.requestId, request.resource.data.groupId)).data.status == 'active'
         && request.resource.data.reportedBy is string
         && request.resource.data.resolvedAt == null
         && request.resource.data.resolvedBy == null;

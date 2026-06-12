@@ -76,6 +76,8 @@ final prayerRequestRepositoryProvider = Provider<PrayerRequestRepository>((
     auth: ref.watch(firebaseAuthProvider),
     firestore: ref.watch(firestoreProvider),
     encryptionService: ref.watch(encryptionServiceProvider),
+    groupKeyService: ref.watch(groupKeyServiceProvider),
+    keyManager: ref.watch(keyManagerProvider),
     groupRepository: ref.watch(groupRepositoryProvider),
     encryptedCache: ref.watch(encryptedCacheProvider),
   );

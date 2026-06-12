@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vesper/core/theme/app_theme.dart';
+import 'package:vesper/core/theme/theme_preference.dart';
 
 void main() {
   test('light theme uses the manuscript icon palette', () {
@@ -96,5 +97,153 @@ void main() {
       AppTheme.darkForDate(DateTime(2026, 5, 24)).colorScheme.primary,
       const Color(0xffc46a60),
     );
+  });
+
+  test(
+    'theme preference defaults to the Anglican liturgical calendar color',
+    () {
+      final theme = AppTheme.lightForPreference(
+        const ThemePreference.liturgical(),
+        date: DateTime(2026, 6, 4),
+      );
+
+      expect(theme.colorScheme.primary, const Color(0xff208070));
+    },
+  );
+
+  test('liturgical rite preferences resolve their current color', () {
+    expect(
+      AppTheme.lightForPreference(
+        const ThemePreference.liturgical(LiturgicalRite.roman),
+        date: DateTime(2026, 3, 1),
+      ).colorScheme.primary,
+      const Color(0xff583070),
+    );
+    expect(
+      AppTheme.lightForPreference(
+        const ThemePreference.liturgical(LiturgicalRite.anglican),
+        date: DateTime(2026, 5, 24),
+      ).colorScheme.primary,
+      const Color(0xff8f2f2f),
+    );
+    expect(
+      AppTheme.lightForPreference(
+        const ThemePreference.liturgical(LiturgicalRite.lutheran),
+        date: DateTime(2026, 12, 25),
+      ).colorScheme.primary,
+      const Color(0xffb58a32),
+    );
+  });
+
+  test('Byzantine rite follows Orthodox movable seasons and feast colors', () {
+    expect(
+      AppTheme.lightForLiturgicalRite(
+        LiturgicalRite.byzantine,
+        DateTime(2026, 3, 2),
+      ).colorScheme.primary,
+      const Color(0xff583070),
+    );
+    expect(
+      AppTheme.lightForLiturgicalRite(
+        LiturgicalRite.byzantine,
+        DateTime(2026, 4, 10),
+      ).colorScheme.primary,
+      const Color(0xff151515),
+    );
+    expect(
+      AppTheme.lightForLiturgicalRite(
+        LiturgicalRite.byzantine,
+        DateTime(2026, 4, 12),
+      ).colorScheme.primary,
+      const Color(0xffb58a32),
+    );
+    expect(
+      AppTheme.lightForLiturgicalRite(
+        LiturgicalRite.byzantine,
+        DateTime(2026, 5, 31),
+      ).colorScheme.primary,
+      const Color(0xff208070),
+    );
+    expect(
+      AppTheme.lightForLiturgicalRite(
+        LiturgicalRite.byzantine,
+        DateTime(2026, 8, 15),
+      ).colorScheme.primary,
+      const Color(0xff294f7a),
+    );
+  });
+
+  test('Russian rite uses Julian fixed feasts with Orthodox Pascha', () {
+    expect(
+      AppTheme.lightForLiturgicalRite(
+        LiturgicalRite.russian,
+        DateTime(2026, 1, 7),
+      ).colorScheme.primary,
+      const Color(0xffb58a32),
+    );
+    expect(
+      AppTheme.lightForLiturgicalRite(
+        LiturgicalRite.russian,
+        DateTime(2026, 4, 7),
+      ).colorScheme.primary,
+      const Color(0xff294f7a),
+    );
+    expect(
+      AppTheme.lightForLiturgicalRite(
+        LiturgicalRite.russian,
+        DateTime(2026, 4, 12),
+      ).colorScheme.primary,
+      const Color(0xffb58a32),
+    );
+  });
+
+  test('Coptic rite follows Coptic feasts fasts and Pascha color rules', () {
+    expect(
+      AppTheme.lightForLiturgicalRite(
+        LiturgicalRite.coptic,
+        DateTime(2026, 1, 7),
+      ).colorScheme.primary,
+      const Color(0xffb58a32),
+    );
+    expect(
+      AppTheme.lightForLiturgicalRite(
+        LiturgicalRite.coptic,
+        DateTime(2026, 3, 2),
+      ).colorScheme.primary,
+      const Color(0xff583070),
+    );
+    expect(
+      AppTheme.lightForLiturgicalRite(
+        LiturgicalRite.coptic,
+        DateTime(2026, 4, 10),
+      ).colorScheme.primary,
+      const Color(0xff151515),
+    );
+    expect(
+      AppTheme.lightForLiturgicalRite(
+        LiturgicalRite.coptic,
+        DateTime(2026, 5, 31),
+      ).colorScheme.primary,
+      const Color(0xff8f2f2f),
+    );
+  });
+
+  test('fixed theme preference resolves built in liturgical colors', () {
+    final theme = AppTheme.lightForPreference(
+      const ThemePreference.fixed('purple'),
+      date: DateTime(2026, 6, 4),
+    );
+
+    expect(theme.colorScheme.primary, const Color(0xff583070));
+  });
+
+  test('custom theme preference uses selected primary color', () {
+    const custom = Color(0xff336699);
+    final theme = AppTheme.lightForPreference(
+      const ThemePreference.custom(custom),
+      date: DateTime(2026, 6, 4),
+    );
+
+    expect(theme.colorScheme.primary, custom);
   });
 }
