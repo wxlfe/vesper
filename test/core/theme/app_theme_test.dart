@@ -102,8 +102,8 @@ void main() {
   test(
     'theme preference defaults to the Anglican liturgical calendar color',
     () {
-      final theme = AppTheme.lightForPreference(
-        const ThemePreference.liturgical(),
+      final theme = AppTheme.lightForColorPreference(
+        const ThemeColorPreference.liturgical(),
         date: DateTime(2026, 6, 4),
       );
 
@@ -114,21 +114,21 @@ void main() {
   test('liturgical rite preferences resolve their current color', () {
     expect(
       AppTheme.lightForPreference(
-        const ThemePreference.liturgical(LiturgicalRite.roman),
+        const ThemeColorPreference.liturgical(LiturgicalRite.roman),
         date: DateTime(2026, 3, 1),
       ).colorScheme.primary,
       const Color(0xff583070),
     );
     expect(
       AppTheme.lightForPreference(
-        const ThemePreference.liturgical(LiturgicalRite.anglican),
+        const ThemeColorPreference.liturgical(LiturgicalRite.anglican),
         date: DateTime(2026, 5, 24),
       ).colorScheme.primary,
       const Color(0xff8f2f2f),
     );
     expect(
       AppTheme.lightForPreference(
-        const ThemePreference.liturgical(LiturgicalRite.lutheran),
+        const ThemeColorPreference.liturgical(LiturgicalRite.lutheran),
         date: DateTime(2026, 12, 25),
       ).colorScheme.primary,
       const Color(0xffb58a32),
@@ -229,8 +229,8 @@ void main() {
   });
 
   test('fixed theme preference resolves built in liturgical colors', () {
-    final theme = AppTheme.lightForPreference(
-      const ThemePreference.fixed('purple'),
+    final theme = AppTheme.lightForColorPreference(
+      const ThemeColorPreference.fixed('purple'),
       date: DateTime(2026, 6, 4),
     );
 
@@ -239,11 +239,57 @@ void main() {
 
   test('custom theme preference uses selected primary color', () {
     const custom = Color(0xff336699);
-    final theme = AppTheme.lightForPreference(
-      const ThemePreference.custom(custom),
+    final theme = AppTheme.lightForColorPreference(
+      const ThemeColorPreference.custom(custom),
       date: DateTime(2026, 6, 4),
     );
 
     expect(theme.colorScheme.primary, custom);
+  });
+
+  test('traditional style keeps manuscript typography', () {
+    final theme = AppTheme.lightForPreferences(
+      const ThemeColorPreference.fixed('green'),
+      ThemeStyle.traditional,
+      date: DateTime(2026, 6, 4),
+    );
+
+    expect(theme.textTheme.bodyLarge?.fontFamily, 'Georgia');
+    expect(theme.scaffoldBackgroundColor, const Color(0xfffbf3df));
+    expect(theme.extension<VesperThemeTokens>()?.style, ThemeStyle.traditional);
+  });
+
+  test('contemporary style uses Material typography and selected color', () {
+    const custom = Color(0xff336699);
+    final theme = AppTheme.lightForPreferences(
+      const ThemeColorPreference.custom(custom),
+      ThemeStyle.contemporary,
+      date: DateTime(2026, 6, 4),
+    );
+
+    expect(theme.colorScheme.primary, custom);
+    expect(theme.textTheme.bodyLarge?.fontFamily, isNot('Georgia'));
+    expect(
+      theme.extension<VesperThemeTokens>()?.style,
+      ThemeStyle.contemporary,
+    );
+  });
+
+  test('contemporary style supports light and dark device modes', () {
+    final light = AppTheme.lightForPreferences(
+      const ThemeColorPreference.fixed('purple'),
+      ThemeStyle.contemporary,
+      date: DateTime(2026, 6, 4),
+    );
+    final dark = AppTheme.darkForPreferences(
+      const ThemeColorPreference.fixed('purple'),
+      ThemeStyle.contemporary,
+      date: DateTime(2026, 6, 4),
+    );
+
+    expect(light.brightness, Brightness.light);
+    expect(dark.brightness, Brightness.dark);
+    expect(light.colorScheme.primary, const Color(0xff583070));
+    expect(dark.colorScheme.primary, const Color(0xffa78bd0));
   });
 }

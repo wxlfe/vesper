@@ -125,39 +125,89 @@ class AppTheme {
     return darkForPrimary(_darkPrimaryForRite(rite, date));
   }
 
-  static ThemeData lightForPreference(
-    ThemePreference preference, {
+  static ThemeData lightForPreferences(
+    ThemeColorPreference colorPreference,
+    ThemeStyle style, {
     DateTime? date,
   }) {
-    return switch (preference.mode) {
-      ThemeColorMode.liturgical => lightForLiturgicalRite(
-        preference.liturgicalRite ?? LiturgicalRite.anglican,
-        date ?? DateTime.now(),
+    return switch (style) {
+      ThemeStyle.traditional => lightForColorPreference(
+        colorPreference,
+        date: date,
       ),
-      ThemeColorMode.fixed => lightForPrimary(
-        _optionForId(preference.fixedOptionId).lightColor,
-      ),
-      ThemeColorMode.custom => lightForPrimary(
-        preference.customColor ?? _lightIconGreen,
+      ThemeStyle.contemporary => _contemporaryTheme(
+        brightness: Brightness.light,
+        primaryAccent: _lightPrimaryForPreference(colorPreference, date),
       ),
     };
   }
 
-  static ThemeData darkForPreference(
-    ThemePreference preference, {
+  static ThemeData darkForPreferences(
+    ThemeColorPreference colorPreference,
+    ThemeStyle style, {
     DateTime? date,
   }) {
+    return switch (style) {
+      ThemeStyle.traditional => darkForColorPreference(
+        colorPreference,
+        date: date,
+      ),
+      ThemeStyle.contemporary => _contemporaryTheme(
+        brightness: Brightness.dark,
+        primaryAccent: _darkPrimaryForPreference(colorPreference, date),
+      ),
+    };
+  }
+
+  static ThemeData lightForColorPreference(
+    ThemeColorPreference preference, {
+    DateTime? date,
+  }) => lightForPreference(preference, date: date);
+
+  static ThemeData darkForColorPreference(
+    ThemeColorPreference preference, {
+    DateTime? date,
+  }) => darkForPreference(preference, date: date);
+
+  static ThemeData lightForPreference(
+    ThemeColorPreference preference, {
+    DateTime? date,
+  }) {
+    return lightForPrimary(_lightPrimaryForPreference(preference, date));
+  }
+
+  static ThemeData darkForPreference(
+    ThemeColorPreference preference, {
+    DateTime? date,
+  }) {
+    return darkForPrimary(_darkPrimaryForPreference(preference, date));
+  }
+
+  static Color _lightPrimaryForPreference(
+    ThemeColorPreference preference,
+    DateTime? date,
+  ) {
     return switch (preference.mode) {
-      ThemeColorMode.liturgical => darkForLiturgicalRite(
+      ThemeColorMode.liturgical => _lightPrimaryForRite(
         preference.liturgicalRite ?? LiturgicalRite.anglican,
         date ?? DateTime.now(),
       ),
-      ThemeColorMode.fixed => darkForPrimary(
-        _optionForId(preference.fixedOptionId).darkColor,
+      ThemeColorMode.fixed => _optionForId(preference.fixedOptionId).lightColor,
+      ThemeColorMode.custom => preference.customColor ?? _lightIconGreen,
+    };
+  }
+
+  static Color _darkPrimaryForPreference(
+    ThemeColorPreference preference,
+    DateTime? date,
+  ) {
+    return switch (preference.mode) {
+      ThemeColorMode.liturgical => _darkPrimaryForRite(
+        preference.liturgicalRite ?? LiturgicalRite.anglican,
+        date ?? DateTime.now(),
       ),
-      ThemeColorMode.custom => darkForPrimary(
-        preference.customColor ?? _darkIconGreen,
-      ),
+      ThemeColorMode.fixed => _optionForId(preference.fixedOptionId).darkColor,
+      ThemeColorMode.custom => preference.customColor ?? _darkIconGreen,
     };
   }
 
@@ -495,6 +545,7 @@ class AppTheme {
       useMaterial3: true,
       brightness: brightness,
       colorScheme: colorScheme,
+      extensions: const [VesperThemeTokens.traditional()],
       scaffoldBackgroundColor: background,
       fontFamily: 'Georgia',
       dividerColor: divider,
@@ -612,6 +663,89 @@ class AppTheme {
     );
   }
 
+  static ThemeData _contemporaryTheme({
+    required Brightness brightness,
+    required Color primaryAccent,
+  }) {
+    final colorScheme = ColorScheme.fromSeed(
+      seedColor: primaryAccent,
+      brightness: brightness,
+    ).copyWith(primary: primaryAccent);
+    final baseTextTheme = brightness == Brightness.dark
+        ? Typography.material2021(platform: TargetPlatform.iOS).white
+        : Typography.material2021(platform: TargetPlatform.iOS).black;
+    final textTheme = baseTextTheme.apply(
+      bodyColor: colorScheme.onSurface,
+      displayColor: colorScheme.onSurface,
+    );
+    final onPrimary = _bestOnPrimary(primaryAccent, Colors.black);
+
+    return ThemeData(
+      useMaterial3: true,
+      brightness: brightness,
+      colorScheme: colorScheme,
+      extensions: const [VesperThemeTokens.contemporary()],
+      scaffoldBackgroundColor: colorScheme.surface,
+      dividerColor: colorScheme.outlineVariant,
+      textTheme: textTheme,
+      appBarTheme: AppBarTheme(
+        backgroundColor: colorScheme.surface,
+        foregroundColor: colorScheme.onSurface,
+        surfaceTintColor: colorScheme.surfaceTint,
+        elevation: 0,
+        titleTextStyle: textTheme.titleLarge?.copyWith(
+          color: colorScheme.onSurface,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      cardTheme: CardThemeData(
+        color: colorScheme.surfaceContainerLow,
+        elevation: 1,
+        surfaceTintColor: colorScheme.surfaceTint,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: colorScheme.surfaceContainerLow,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: colorScheme.outlineVariant),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: colorScheme.primary, width: 1.5),
+        ),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          minimumSize: const Size(64, 48),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size(64, 48),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      ),
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: primaryAccent,
+        foregroundColor: onPrimary,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      ),
+      bottomAppBarTheme: BottomAppBarThemeData(
+        color: colorScheme.surfaceContainer,
+        surfaceTintColor: colorScheme.surfaceTint,
+      ),
+      iconTheme: IconThemeData(color: colorScheme.onSurfaceVariant),
+    );
+  }
+
   static Color _bestOnPrimary(Color primary, Color darkCandidate) {
     final whiteContrast = _contrastRatio(primary, Colors.white);
     final darkContrast = _contrastRatio(primary, darkCandidate);
@@ -628,6 +762,32 @@ class AppTheme {
         ? secondLuminance
         : firstLuminance;
     return (lighter + 0.05) / (darker + 0.05);
+  }
+}
+
+@immutable
+class VesperThemeTokens extends ThemeExtension<VesperThemeTokens> {
+  const VesperThemeTokens._({required this.style});
+
+  const VesperThemeTokens.traditional() : this._(style: ThemeStyle.traditional);
+
+  const VesperThemeTokens.contemporary()
+    : this._(style: ThemeStyle.contemporary);
+
+  final ThemeStyle style;
+
+  @override
+  VesperThemeTokens copyWith({ThemeStyle? style}) {
+    return VesperThemeTokens._(style: style ?? this.style);
+  }
+
+  @override
+  VesperThemeTokens lerp(
+    covariant ThemeExtension<VesperThemeTokens>? other,
+    double t,
+  ) {
+    if (other is! VesperThemeTokens) return this;
+    return t < 0.5 ? this : other;
   }
 }
 

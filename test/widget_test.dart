@@ -659,13 +659,35 @@ void main() {
     expect(decorations[1].border?.top.color, expectedBorderColor);
   });
 
+  testWidgets(
+    'manuscript card uses Material card styling in contemporary theme',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.lightForPreferences(
+            const ThemeColorPreference.fixed('green'),
+            ThemeStyle.contemporary,
+          ),
+          home: const Scaffold(
+            body: ManuscriptCard(innerBorder: true, child: Text('Modern card')),
+          ),
+        ),
+      );
+
+      final card = tester.widget<Card>(find.byType(Card));
+
+      expect(card.elevation, 1);
+      expect(find.text('Modern card'), findsOneWidget);
+    },
+  );
+
   testWidgets('rubric text adds background for low contrast accent', (
     tester,
   ) async {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.lightForPreference(
-          const ThemePreference.custom(Colors.white),
+          const ThemeColorPreference.custom(Colors.white),
         ),
         home: const Scaffold(body: RubricText('Low contrast')),
       ),
@@ -1122,7 +1144,9 @@ void main() {
         overrides: [
           authRepositoryProvider.overrideWithValue(const _FakeAuthRepository()),
           prayerRequestRepositoryProvider.overrideWithValue(
-            _FakePrayerRequestRepository(watchRequestsStream: controller.stream),
+            _FakePrayerRequestRepository(
+              watchRequestsStream: controller.stream,
+            ),
           ),
           userProfileRepositoryProvider.overrideWithValue(
             const _FakeUserProfileRepository({}),
@@ -2098,7 +2122,7 @@ void main() {
         ],
         child: MaterialApp(
           theme: AppTheme.lightForPreference(
-            const ThemePreference.custom(customAccent),
+            const ThemeColorPreference.custom(customAccent),
           ),
           home: Scaffold(
             body: RequestCard(
@@ -3406,7 +3430,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: AppTheme.lightForPreference(
-          const ThemePreference.custom(customAccent),
+          const ThemeColorPreference.custom(customAccent),
         ),
         home: const Scaffold(
           floatingActionButton: HomeGroupFab(onPressed: null),
@@ -3424,7 +3448,7 @@ void main() {
     tester,
   ) async {
     final theme = AppTheme.lightForPreference(
-      const ThemePreference.custom(Colors.white),
+      const ThemeColorPreference.custom(Colors.white),
     );
 
     await tester.pumpWidget(
@@ -3629,6 +3653,7 @@ void main() {
     expect(find.byType(AppSettingsScreen), findsOneWidget);
     expect(find.text('App Settings'), findsWidgets);
     expect(find.text('Theme'), findsOneWidget);
+    expect(find.text('Theme Color'), findsOneWidget);
   });
 
   testWidgets('app settings shows theme color options', (tester) async {
@@ -3643,6 +3668,17 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Theme'), findsOneWidget);
+    expect(find.text('Theme Color'), findsOneWidget);
+    expect(find.byKey(const Key('theme-style-traditional')), findsOneWidget);
+    expect(find.byKey(const Key('theme-style-contemporary')), findsOneWidget);
+    expect(
+      find.byKey(const Key('theme-style-traditional-selected')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('theme-style-contemporary-selected')),
+      findsNothing,
+    );
     expect(find.byType(ThemeColorListItem), findsNWidgets(13));
     expect(
       find.byKey(const Key('theme-option-liturgical-roman')),
@@ -3718,6 +3754,29 @@ void main() {
     expect(customDecoration.gradient, isNull);
   });
 
+  testWidgets('app settings theme style selection updates selected option', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+
+    await tester.pumpWidget(
+      const ProviderScope(child: MaterialApp(home: AppSettingsScreen())),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('theme-style-contemporary')));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const Key('theme-style-contemporary-selected')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const Key('theme-style-traditional-selected')),
+      findsNothing,
+    );
+  });
+
   testWidgets('app settings fixed color selection updates selected option', (
     tester,
   ) async {
@@ -3728,6 +3787,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.byKey(const Key('theme-option-purple')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('theme-option-purple')));
     await tester.pumpAndSettle();
 
@@ -3745,7 +3806,7 @@ void main() {
       'theme_fixed_option_id': 'purple',
     });
     final selectedTheme = AppTheme.lightForPreference(
-      const ThemePreference.fixed('purple'),
+      const ThemeColorPreference.fixed('purple'),
     );
     final liturgicalColor = AppTheme.light.colorScheme.primary;
 

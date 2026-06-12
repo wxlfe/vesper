@@ -25,14 +25,17 @@ class VesperApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final themePreference =
-        ref.watch(themePreferenceProvider).value ??
-        const ThemePreference.liturgical();
+    final themeColorPreference =
+        ref.watch(themeColorPreferenceProvider).value ??
+        const ThemeColorPreference.liturgical();
+    final themeStyle =
+        ref.watch(themeStylePreferenceProvider).value ?? ThemeStyle.traditional;
     return MaterialApp(
       title: 'Vesper',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightForPreference(themePreference),
-      darkTheme: AppTheme.darkForPreference(themePreference),
+      theme: AppTheme.lightForPreferences(themeColorPreference, themeStyle),
+      darkTheme: AppTheme.darkForPreferences(themeColorPreference, themeStyle),
+      themeMode: ThemeMode.system,
       home: ref
           .watch(authStateProvider)
           .when(
@@ -1548,8 +1551,139 @@ class AppSettingsScreen extends StatelessWidget {
           children: [
             Text('Theme', style: Theme.of(context).textTheme.titleLarge),
             const SizedBox(height: 12),
+            const ThemeStyleSelector(),
+            const SizedBox(height: 24),
+            Text('Theme Color', style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: 12),
             const ThemeColorSelector(),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class ThemeStyleSelector extends ConsumerWidget {
+  const ThemeStyleSelector({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final selectedStyle =
+        ref.watch(themeStylePreferenceProvider).value ?? ThemeStyle.traditional;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ThemeStyleListItem(
+          key: const Key('theme-style-traditional'),
+          selectedKey: selectedStyle == ThemeStyle.traditional
+              ? const Key('theme-style-traditional-selected')
+              : null,
+          label: 'Traditional',
+          description: 'Manuscript-inspired styling.',
+          icon: Icons.auto_stories_outlined,
+          isSelected: selectedStyle == ThemeStyle.traditional,
+          onTap: () => ref
+              .read(themeStylePreferenceProvider.notifier)
+              .setThemeStyle(ThemeStyle.traditional),
+        ),
+        ThemeStyleListItem(
+          key: const Key('theme-style-contemporary'),
+          selectedKey: selectedStyle == ThemeStyle.contemporary
+              ? const Key('theme-style-contemporary-selected')
+              : null,
+          label: 'Contemporary',
+          description: 'Modern Material styling.',
+          icon: Icons.web_asset_outlined,
+          isSelected: selectedStyle == ThemeStyle.contemporary,
+          onTap: () => ref
+              .read(themeStylePreferenceProvider.notifier)
+              .setThemeStyle(ThemeStyle.contemporary),
+        ),
+      ],
+    );
+  }
+}
+
+class ThemeStyleListItem extends StatelessWidget {
+  const ThemeStyleListItem({
+    super.key,
+    this.selectedKey,
+    required this.label,
+    required this.description,
+    required this.icon,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final Key? selectedKey;
+  final String label;
+  final String description;
+  final IconData icon;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Semantics(
+        label: '$label theme style',
+        button: true,
+        selected: isSelected,
+        child: Material(
+          color: Colors.transparent,
+          borderRadius: BorderRadius.circular(18),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isSelected
+                              ? colorScheme.primary
+                              : colorScheme.outlineVariant,
+                          width: isSelected ? 2 : 1,
+                        ),
+                      ),
+                      child: Icon(icon, color: colorScheme.onPrimaryContainer),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          label,
+                          style: Theme.of(context).textTheme.bodyLarge,
+                        ),
+                        Text(
+                          description,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (isSelected)
+                    Icon(
+                      Icons.check_circle_outline,
+                      key: selectedKey,
+                      color: colorScheme.primary,
+                    ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -1562,8 +1696,8 @@ class ThemeColorSelector extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final preference =
-        ref.watch(themePreferenceProvider).value ??
-        const ThemePreference.liturgical();
+        ref.watch(themeColorPreferenceProvider).value ??
+        const ThemeColorPreference.liturgical();
     final theme = Theme.of(context);
     final brightness = theme.brightness;
     final now = DateTime.now();
@@ -1606,7 +1740,7 @@ class ThemeColorSelector extends ConsumerWidget {
                 (preference.liturgicalRite ?? LiturgicalRite.anglican) ==
                     option.rite,
             onTap: () => ref
-                .read(themePreferenceProvider.notifier)
+                .read(themeColorPreferenceProvider.notifier)
                 .setLiturgicalRite(option.rite),
           ),
         for (final option in AppTheme.themeColorOptions)
@@ -1625,8 +1759,9 @@ class ThemeColorSelector extends ConsumerWidget {
             isSelected:
                 preference.mode == ThemeColorMode.fixed &&
                 preference.fixedOptionId == option.id,
-            onTap: () =>
-                ref.read(themePreferenceProvider.notifier).setFixed(option.id),
+            onTap: () => ref
+                .read(themeColorPreferenceProvider.notifier)
+                .setFixed(option.id),
           ),
         ThemeColorListItem(
           key: const Key('theme-option-custom'),
@@ -1841,7 +1976,7 @@ class _ThemeColorPickerSheetState extends ConsumerState<ThemeColorPickerSheet> {
                 ElevatedButton(
                   onPressed: () async {
                     await ref
-                        .read(themePreferenceProvider.notifier)
+                        .read(themeColorPreferenceProvider.notifier)
                         .setCustom(_selectedColor);
                     if (context.mounted) Navigator.of(context).pop();
                   },
@@ -4135,7 +4270,9 @@ class MyPrayerRequestsForGroup extends ConsumerWidget {
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           logRequestStreamError(snapshot.error, snapshot.stackTrace);
-          return EmptyCard(text: 'We could not load requests for ${group.name}.');
+          return EmptyCard(
+            text: 'We could not load requests for ${group.name}.',
+          );
         }
         if (!snapshot.hasData) return const RequestFeedLoading();
         final requests = snapshot.data!

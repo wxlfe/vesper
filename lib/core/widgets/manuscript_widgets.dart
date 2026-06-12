@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:vesper/core/theme/app_theme.dart';
+import 'package:vesper/core/theme/theme_preference.dart';
 
 class ManuscriptCard extends StatelessWidget {
   const ManuscriptCard({
@@ -14,6 +16,13 @@ class ManuscriptCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = Theme.of(context).extension<VesperThemeTokens>();
+    if (tokens?.style == ThemeStyle.contemporary) {
+      return Card(
+        elevation: 1,
+        child: Padding(padding: padding, child: child),
+      );
+    }
     final colorScheme = Theme.of(context).colorScheme;
     final borderColor = colorScheme.secondary.withValues(alpha: 0.45);
     return DecoratedBox(
@@ -57,6 +66,15 @@ class RubricText extends StatelessWidget {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final accent = color ?? colorScheme.primary;
+    final tokens = theme.extension<VesperThemeTokens>();
+    if (tokens?.style == ThemeStyle.contemporary) {
+      return ReadableAccentText(
+        text,
+        color: accent,
+        style: theme.textTheme.labelLarge,
+        backgroundKey: const Key('rubric-text-readable-background'),
+      );
+    }
     return ReadableAccentText(
       text.toUpperCase(),
       color: accent,
@@ -120,6 +138,13 @@ class IlluminatedDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final tokens = Theme.of(context).extension<VesperThemeTokens>();
+    if (tokens?.style == ThemeStyle.contemporary) {
+      return SizedBox(
+        height: compact ? 12 : 20,
+        child: Divider(color: colorScheme.outlineVariant),
+      );
+    }
     final height = compact ? 16.0 : 24.0;
     return SizedBox(
       height: height,

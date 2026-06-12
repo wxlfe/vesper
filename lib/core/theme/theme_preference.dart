@@ -2,22 +2,24 @@ import 'package:flutter/material.dart';
 
 enum ThemeColorMode { liturgical, fixed, custom }
 
+enum ThemeStyle { traditional, contemporary }
+
 enum LiturgicalRite { roman, byzantine, russian, coptic, lutheran, anglican }
 
-class ThemePreference {
-  const ThemePreference.liturgical([
+class ThemeColorPreference {
+  const ThemeColorPreference.liturgical([
     this.liturgicalRite = LiturgicalRite.anglican,
   ]) : mode = ThemeColorMode.liturgical,
        fixedOptionId = null,
        customColor = null;
 
-  const ThemePreference.fixed(String optionId)
+  const ThemeColorPreference.fixed(String optionId)
     : mode = ThemeColorMode.fixed,
       liturgicalRite = null,
       fixedOptionId = optionId,
       customColor = null;
 
-  const ThemePreference.custom(Color color)
+  const ThemeColorPreference.custom(Color color)
     : mode = ThemeColorMode.custom,
       liturgicalRite = null,
       fixedOptionId = null,
@@ -30,7 +32,7 @@ class ThemePreference {
 
   @override
   bool operator ==(Object other) {
-    return other is ThemePreference &&
+    return other is ThemeColorPreference &&
         other.mode == mode &&
         other.liturgicalRite == liturgicalRite &&
         other.fixedOptionId == fixedOptionId &&

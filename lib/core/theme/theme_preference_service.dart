@@ -2,32 +2,34 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vesper/core/theme/theme_preference.dart';
 
-class ThemePreferenceService {
-  const ThemePreferenceService();
+class ThemeColorPreferenceService {
+  const ThemeColorPreferenceService();
 
   static const _modeKey = 'theme_color_mode';
   static const _liturgicalRiteKey = 'theme_liturgical_rite';
   static const _fixedOptionIdKey = 'theme_fixed_option_id';
   static const _customColorKey = 'theme_custom_color';
 
-  Future<ThemePreference> readThemePreference() async {
+  Future<ThemeColorPreference> readThemeColorPreference() async {
     final preferences = await SharedPreferences.getInstance();
     final mode = preferences.getString(_modeKey);
     return switch (mode) {
-      'liturgical' => ThemePreference.liturgical(
+      'liturgical' => ThemeColorPreference.liturgical(
         _riteForId(preferences.getString(_liturgicalRiteKey)),
       ),
-      'fixed' => ThemePreference.fixed(
+      'fixed' => ThemeColorPreference.fixed(
         preferences.getString(_fixedOptionIdKey) ?? 'green',
       ),
-      'custom' => ThemePreference.custom(
+      'custom' => ThemeColorPreference.custom(
         Color(preferences.getInt(_customColorKey) ?? 0xff208070),
       ),
-      _ => const ThemePreference.liturgical(LiturgicalRite.anglican),
+      _ => const ThemeColorPreference.liturgical(LiturgicalRite.anglican),
     };
   }
 
-  Future<void> writeThemePreference(ThemePreference preference) async {
+  Future<void> writeThemeColorPreference(
+    ThemeColorPreference preference,
+  ) async {
     final preferences = await SharedPreferences.getInstance();
     await preferences.setString(_modeKey, preference.mode.name);
     switch (preference.mode) {
@@ -60,5 +62,25 @@ class ThemePreferenceService {
       (rite) => rite.name == id,
       orElse: () => LiturgicalRite.anglican,
     );
+  }
+}
+
+class ThemeStylePreferenceService {
+  const ThemeStylePreferenceService();
+
+  static const _styleKey = 'theme_style';
+
+  Future<ThemeStyle> readThemeStyle() async {
+    final preferences = await SharedPreferences.getInstance();
+    final style = preferences.getString(_styleKey);
+    return ThemeStyle.values.firstWhere(
+      (value) => value.name == style,
+      orElse: () => ThemeStyle.traditional,
+    );
+  }
+
+  Future<void> writeThemeStyle(ThemeStyle style) async {
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.setString(_styleKey, style.name);
   }
 }

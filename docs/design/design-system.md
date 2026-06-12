@@ -1,6 +1,6 @@
 # Design System
 
-The Vesper design system should make private prayer collaboration feel like a quiet, personal prayer book: reverent, readable, trustworthy, and gently illuminated. The visual language is globally inspired by illuminated manuscripts, but it must remain calm and useful rather than decorative for its own sake.
+The Vesper design system should make private prayer collaboration feel quiet, readable, trustworthy, and emotionally lightweight. Vesper supports two app themes: `Traditional`, the default manuscript-inspired style, and `Contemporary`, a modern Material style. Both themes must preserve the same privacy-first workflows and can use the same Theme Color choices.
 
 ## Brand
 
@@ -12,7 +12,7 @@ Design attributes:
 - Pastoral
 - Prayerful
 - Trustworthy
-- Manuscript-inspired
+- Manuscript-inspired by default
 - Privacy-respecting
 - Warm and readable
 
@@ -26,11 +26,22 @@ Avoid attributes:
 - Surveillance-oriented
 - Aggressively religious
 
-Vesper should use an illuminated manuscript style consistently throughout the app. This means cream surfaces, traditional serif typography, restrained ornament, rubric-like section labels, and colors drawn from parchment, ink, muted gold, oxblood, lapis, malachite, and warm umber. The app should not feel like a novelty medieval interface; manuscript references should support prayer, structure, and reading.
+The Traditional theme uses an illuminated manuscript style consistently throughout the app. This means cream surfaces, traditional serif typography, restrained ornament, rubric-like section labels, and colors drawn from parchment, ink, muted gold, oxblood, lapis, malachite, and warm umber. The app should not feel like a novelty medieval interface; manuscript references should support prayer, structure, and reading.
+
+The Contemporary theme uses modern Material styling with platform sans-serif typography, simpler surfaces, less ornament, and system light/dark mode behavior. It must keep the same navigation, privacy behavior, request workflows, and available Theme Color choices as Traditional.
+
+## Theme Settings
+
+`Theme` controls the visual style:
+
+- `Traditional`: default manuscript-inspired style.
+- `Contemporary`: modern Material style that follows the device light/dark mode.
+
+`Theme Color` controls the primary accent independently of theme style. Liturgical, fixed, and custom colors must be available in both Traditional and Contemporary themes.
 
 ## Typography
 
-Primary reading and heading font: a traditional, highly readable serif.
+Traditional primary reading and heading font: a traditional, highly readable serif.
 
 Recommended candidates:
 
@@ -39,7 +50,7 @@ Recommended candidates:
 - `Source Serif 4`
 - `Georgia`
 
-Utility font for dense metadata and controls, when needed: a quiet humanist sans or platform system font.
+Contemporary typography should use platform sans-serif fonts similar to Helvetica, such as San Francisco on iOS and Roboto on Android. Utility font for dense metadata and controls, when needed: a quiet humanist sans or platform system font.
 
 Fallback stack:
 
